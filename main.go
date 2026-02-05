@@ -39,6 +39,11 @@ type lookupResponse struct {
 	PublicPort int    `json:"public_port"`
 }
 
+type peerEndpoint struct {
+	IP   string
+	Port int
+}
+
 func main() {
 	serverAddr := flag.String("server", "localhost:8080", "rendezvous server address (host:port)")
 	listenPort := flag.Int("port", 0, "listening port (0 = auto)")
@@ -49,13 +54,14 @@ func main() {
 		panic(err)
 	}
 
-	listener, err := net.Listen("tcp", ":"+strconv.Itoa(*listenPort))
+	udpAddr := &net.UDPAddr{Port: *listenPort}
+	conn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
-		log.Fatalf("listen failed: %v", err)
+		log.Fatalf("udp listen failed: %v", err)
 	}
-	defer listener.Close()
+	defer conn.Close()
 
-	resolvedPort := listener.Addr().(*net.TCPAddr).Port
+	resolvedPort := conn.LocalAddr().(*net.UDPAddr).Port
 
 	fmt.Println("chute client starting")
 	fmt.Printf("client id: %s\n", clientID)
@@ -70,8 +76,8 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go acceptConnections(ctx, listener, clientID)
-	go handleSignals(cancel)
+	go serveUDP(ctx, conn, clientID)
+	go handleSignals(*serverAddr, clientID, cancel)
 
 	runCLI(ctx, cancel, clientID, *serverAddr)
 }
@@ -92,7 +98,8 @@ func generateClientID() (string, error) {
 	return string(result[:]), nil
 }
 
-func acceptConnections(ctx context.Context, listener net.Listener, clientID string) {
+func serveUDP(ctx context.Context, conn *net.UDPConn, clientID string) {
+	buf := make([]byte, 1024)
 	for {
 		select {
 		case <-ctx.Done():
@@ -100,31 +107,25 @@ func acceptConnections(ctx context.Context, listener net.Listener, clientID stri
 		default:
 		}
 
-		conn, err := listener.Accept()
+		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		n, remoteAddr, err := conn.ReadFromUDP(buf)
 		if err != nil {
-			log.Printf("accept failed: %v", err)
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				continue
+			}
+			log.Printf("udp read failed: %v", err)
 			continue
 		}
-		go handleConn(conn, clientID)
+
+		message := strings.TrimSpace(string(buf[:n]))
+		log.Printf("udp received client_id=%s remote=%s message=%s", clientID, remoteAddr.String(), message)
+
+		if _, err := conn.WriteToUDP([]byte(message), remoteAddr); err != nil {
+			log.Printf("udp echo failed: %v", err)
+		} else {
+			log.Printf("udp echo sent client_id=%s remote=%s", clientID, remoteAddr.String())
+		}
 	}
-}
-
-func handleConn(conn net.Conn, clientID string) {
-	defer conn.Close()
-
-	remoteAddr := conn.RemoteAddr().String()
-	log.Printf("incoming connection client_id=%s remote=%s", clientID, remoteAddr)
-
-	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	reader := bufio.NewReader(conn)
-	line, err := reader.ReadString('\n')
-	if err != nil {
-		log.Printf("read failed: %v", err)
-		return
-	}
-
-	message := strings.TrimSpace(line)
-	log.Printf("received message client_id=%s remote=%s message=%s", clientID, remoteAddr, message)
 }
 
 func runCLI(ctx context.Context, cancel context.CancelFunc, clientID, serverAddr string) {
@@ -157,6 +158,17 @@ func runCLI(ctx context.Context, cancel context.CancelFunc, clientID, serverAddr
 				continue
 			}
 			log.Printf("connect ok client_id=%s target=%s", clientID, id)
+		case strings.HasPrefix(line, "udp "):
+			targetID, message, ok := parseUDPCommand(line)
+			if !ok {
+				fmt.Println("usage: udp <id> <message>")
+				continue
+			}
+			if err := sendMessage(ctx, serverAddr, clientID, targetID, []byte(message)); err != nil {
+				log.Printf("udp failed client_id=%s target=%s err=%v", clientID, targetID, err)
+				continue
+			}
+			log.Printf("udp ok client_id=%s target=%s", clientID, targetID)
 		default:
 			printHelp()
 		}
@@ -166,6 +178,7 @@ func runCLI(ctx context.Context, cancel context.CancelFunc, clientID, serverAddr
 func printHelp() {
 	fmt.Println("commands:")
 	fmt.Println("  connect <id>")
+	fmt.Println("  udp <id> <message>")
 	fmt.Println("  exit")
 }
 
@@ -174,37 +187,66 @@ func registerWithServer(serverAddr, clientID string, port int) error {
 		ID:   clientID,
 		Port: port,
 	}
+	log.Printf("registering client_id=%s udp_port=%d", clientID, port)
 	return postJSON(serverAddr, "/register", payload, nil, http.StatusOK)
 }
 
 func connectToPeer(ctx context.Context, serverAddr, selfID, targetID string) error {
+	message := fmt.Sprintf("hello from %s\n", selfID)
+	return sendMessage(ctx, serverAddr, selfID, targetID, []byte(message))
+}
+
+func sendMessage(ctx context.Context, serverAddr, selfID, targetID string, payload []byte) error {
 	peer, err := lookupPeer(serverAddr, targetID)
 	if err != nil {
 		return err
 	}
 
-	address := net.JoinHostPort(peer.PublicIP, strconv.Itoa(peer.PublicPort))
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", address)
+	return sendMessageToPeer(ctx, selfID, targetID, peer, payload)
+}
+
+func sendMessageToPeer(ctx context.Context, selfID, targetID string, peer peerEndpoint, payload []byte) error {
+	remoteAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(peer.IP, strconv.Itoa(peer.Port)))
 	if err != nil {
-		return fmt.Errorf("dial %s failed: %w", address, err)
+		return fmt.Errorf("resolve udp addr failed: %w", err)
+	}
+
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "udp", remoteAddr.String())
+	if err != nil {
+		return fmt.Errorf("udp dial %s failed: %w", remoteAddr.String(), err)
 	}
 	defer conn.Close()
 
-	message := fmt.Sprintf("hello from %s\n", selfID)
-	if _, err := conn.Write([]byte(message)); err != nil {
-		return fmt.Errorf("send failed: %w", err)
+	if _, err := conn.Write(payload); err != nil {
+		return fmt.Errorf("udp send failed: %w", err)
 	}
+	log.Printf("udp sent client_id=%s target=%s remote=%s bytes=%d", selfID, targetID, remoteAddr.String(), len(payload))
+
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	buf := make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		return fmt.Errorf("udp read failed: %w", err)
+	}
+
+	echo := strings.TrimSpace(string(buf[:n]))
+	log.Printf("udp echo received client_id=%s target=%s message=%s", selfID, targetID, echo)
 	return nil
 }
 
-func lookupPeer(serverAddr, targetID string) (lookupResponse, error) {
+func lookupPeer(serverAddr, targetID string) (peerEndpoint, error) {
 	payload := lookupRequest{ID: targetID}
 	var peer lookupResponse
 	if err := postJSON(serverAddr, "/lookup", payload, &peer, http.StatusOK); err != nil {
-		return lookupResponse{}, err
+		return peerEndpoint{}, err
 	}
-	return peer, nil
+	endpoint := peerEndpoint{
+		IP:   peer.PublicIP,
+		Port: peer.PublicPort,
+	}
+	log.Printf("lookup ok target=%s udp_endpoint=%s:%d", targetID, endpoint.IP, endpoint.Port)
+	return endpoint, nil
 }
 
 func unregisterAndExit(serverAddr, clientID string) {
@@ -218,11 +260,13 @@ func unregisterWithServer(serverAddr, clientID string) error {
 	return postJSON(serverAddr, "/unregister", payload, nil, http.StatusOK, http.StatusNotFound)
 }
 
-func handleSignals(cancel context.CancelFunc) {
+func handleSignals(serverAddr, clientID string, cancel context.CancelFunc) {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 	<-sigs
+	unregisterAndExit(serverAddr, clientID)
 	cancel()
+	os.Exit(0)
 }
 
 func postJSON(serverAddr, path string, payload any, response any, okStatuses ...int) error {
@@ -258,4 +302,17 @@ func parseConnectID(line string) (string, bool) {
 		return "", false
 	}
 	return id, true
+}
+
+func parseUDPCommand(line string) (string, string, bool) {
+	parts := strings.SplitN(line, " ", 3)
+	if len(parts) < 3 {
+		return "", "", false
+	}
+	id := strings.TrimSpace(parts[1])
+	message := strings.TrimSpace(parts[2])
+	if id == "" || message == "" {
+		return "", "", false
+	}
+	return id, message, true
 }
