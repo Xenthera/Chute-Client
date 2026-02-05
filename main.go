@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"flag"
@@ -17,6 +19,25 @@ import (
 	"syscall"
 	"time"
 )
+
+type registerRequest struct {
+	ID   string `json:"id"`
+	Port int    `json:"port"`
+}
+
+type lookupRequest struct {
+	ID string `json:"id"`
+}
+
+type unregisterRequest struct {
+	ID string `json:"id"`
+}
+
+type lookupResponse struct {
+	ID         string `json:"id"`
+	PublicIP   string `json:"public_ip"`
+	PublicPort int    `json:"public_port"`
+}
 
 func main() {
 	serverAddr := flag.String("server", "localhost:8080", "rendezvous server address (host:port)")
@@ -46,10 +67,13 @@ func main() {
 	}
 	log.Println("registered with rendezvous server")
 
-	go acceptConnections(listener)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	go handleSignals(*serverAddr, clientID)
-	runCLI(clientID, *serverAddr)
+	go acceptConnections(ctx, listener, clientID)
+	go handleSignals(cancel)
+
+	runCLI(ctx, cancel, clientID, *serverAddr)
 }
 
 func generateClientID() (string, error) {
@@ -68,35 +92,42 @@ func generateClientID() (string, error) {
 	return string(result[:]), nil
 }
 
-func acceptConnections(listener net.Listener) {
+func acceptConnections(ctx context.Context, listener net.Listener, clientID string) {
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Printf("accept failed: %v", err)
 			continue
 		}
-		go handleConn(conn)
+		go handleConn(conn, clientID)
 	}
 }
 
-func handleConn(conn net.Conn) {
+func handleConn(conn net.Conn, clientID string) {
 	defer conn.Close()
 
-	log.Printf("incoming connection from %s", conn.RemoteAddr().String())
+	remoteAddr := conn.RemoteAddr().String()
+	log.Printf("incoming connection client_id=%s remote=%s", clientID, remoteAddr)
 
-	buf := make([]byte, 256)
 	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	n, err := conn.Read(buf)
+	reader := bufio.NewReader(conn)
+	line, err := reader.ReadString('\n')
 	if err != nil {
 		log.Printf("read failed: %v", err)
 		return
 	}
 
-	message := strings.TrimSpace(string(buf[:n]))
-	log.Printf("received message: %s", message)
+	message := strings.TrimSpace(line)
+	log.Printf("received message client_id=%s remote=%s message=%s", clientID, remoteAddr, message)
 }
 
-func runCLI(clientID, serverAddr string) {
+func runCLI(ctx context.Context, cancel context.CancelFunc, clientID, serverAddr string) {
 	scanner := bufio.NewScanner(os.Stdin)
 	printHelp()
 
@@ -113,18 +144,19 @@ func runCLI(clientID, serverAddr string) {
 		switch {
 		case line == "exit":
 			unregisterAndExit(serverAddr, clientID)
+			cancel()
 			return
 		case strings.HasPrefix(line, "connect "):
-			id := strings.TrimSpace(strings.TrimPrefix(line, "connect "))
-			if id == "" {
+			id, ok := parseConnectID(line)
+			if !ok {
 				fmt.Println("usage: connect <id>")
 				continue
 			}
-			if err := connectToPeer(serverAddr, clientID, id); err != nil {
-				log.Printf("connect failed: %v", err)
+			if err := connectToPeer(ctx, serverAddr, clientID, id); err != nil {
+				log.Printf("connect failed client_id=%s target=%s err=%v", clientID, id, err)
 				continue
 			}
-			log.Printf("connect ok: %s", id)
+			log.Printf("connect ok client_id=%s target=%s", clientID, id)
 		default:
 			printHelp()
 		}
@@ -142,32 +174,18 @@ func registerWithServer(serverAddr, clientID string, port int) error {
 		ID:   clientID,
 		Port: port,
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	url := "http://" + serverAddr + "/register"
-	resp, err := http.Post(url, "application/json", strings.NewReader(string(body)))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-	return nil
+	return postJSON(serverAddr, "/register", payload, nil, http.StatusOK)
 }
 
-func connectToPeer(serverAddr, selfID, targetID string) error {
+func connectToPeer(ctx context.Context, serverAddr, selfID, targetID string) error {
 	peer, err := lookupPeer(serverAddr, targetID)
 	if err != nil {
 		return err
 	}
 
 	address := net.JoinHostPort(peer.PublicIP, strconv.Itoa(peer.PublicPort))
-	conn, err := net.Dial("tcp", address)
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return fmt.Errorf("dial %s failed: %w", address, err)
 	}
@@ -180,48 +198,13 @@ func connectToPeer(serverAddr, selfID, targetID string) error {
 	return nil
 }
 
-type lookupResponse struct {
-	ID         string `json:"id"`
-	PublicIP   string `json:"public_ip"`
-	PublicPort int    `json:"public_port"`
-}
-
 func lookupPeer(serverAddr, targetID string) (lookupResponse, error) {
 	payload := lookupRequest{ID: targetID}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return lookupResponse{}, err
-	}
-
-	url := "http://" + serverAddr + "/lookup"
-	resp, err := http.Post(url, "application/json", strings.NewReader(string(body)))
-	if err != nil {
-		return lookupResponse{}, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return lookupResponse{}, fmt.Errorf("lookup unexpected status: %d", resp.StatusCode)
-	}
-
 	var peer lookupResponse
-	if err := json.NewDecoder(resp.Body).Decode(&peer); err != nil {
+	if err := postJSON(serverAddr, "/lookup", payload, &peer, http.StatusOK); err != nil {
 		return lookupResponse{}, err
 	}
 	return peer, nil
-}
-
-type registerRequest struct {
-	ID   string `json:"id"`
-	Port int    `json:"port"`
-}
-
-type lookupRequest struct {
-	ID string `json:"id"`
-}
-
-type unregisterRequest struct {
-	ID string `json:"id"`
 }
 
 func unregisterAndExit(serverAddr, clientID string) {
@@ -232,28 +215,47 @@ func unregisterAndExit(serverAddr, clientID string) {
 
 func unregisterWithServer(serverAddr, clientID string) error {
 	payload := unregisterRequest{ID: clientID}
+	return postJSON(serverAddr, "/unregister", payload, nil, http.StatusOK, http.StatusNotFound)
+}
+
+func handleSignals(cancel context.CancelFunc) {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	<-sigs
+	cancel()
+}
+
+func postJSON(serverAddr, path string, payload any, response any, okStatuses ...int) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 
-	url := "http://" + serverAddr + "/unregister"
-	resp, err := http.Post(url, "application/json", strings.NewReader(string(body)))
+	url := "http://" + serverAddr + path
+	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	for _, status := range okStatuses {
+		if resp.StatusCode == status {
+			if response != nil {
+				if err := json.NewDecoder(resp.Body).Decode(response); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
 	}
-	return nil
+
+	return fmt.Errorf("unexpected status: %d", resp.StatusCode)
 }
 
-func handleSignals(serverAddr, clientID string) {
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
-	<-sigs
-	unregisterAndExit(serverAddr, clientID)
-	os.Exit(0)
+func parseConnectID(line string) (string, bool) {
+	id := strings.TrimSpace(strings.TrimPrefix(line, "connect "))
+	if id == "" {
+		return "", false
+	}
+	return id, true
 }
