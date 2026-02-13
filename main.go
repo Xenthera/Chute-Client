@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,7 +12,6 @@ import (
 
 func main() {
 	serverAddr := flag.String("server", "localhost:8080", "rendezvous server address (host:port)")
-	listenPort := flag.Int("port", 0, "listening port (0 = auto)")
 	flag.Parse()
 
 	clientID, err := generateClientID()
@@ -21,33 +19,16 @@ func main() {
 		panic(err)
 	}
 
-	udpAddr := &net.UDPAddr{Port: *listenPort}
-	conn, err := net.ListenUDP("udp", udpAddr)
-	if err != nil {
-		log.Fatalf("udp listen failed: %v", err)
-	}
-	defer conn.Close()
-
-	resolvedPort := conn.LocalAddr().(*net.UDPAddr).Port
-
 	fmt.Println("chute client starting")
 	fmt.Printf("client id: %s\n", clientID)
 	fmt.Printf("server: %s\n", *serverAddr)
-	fmt.Printf("listen port: %d\n", resolvedPort)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	session := NewChuteSession(conn, clientID)
-	client := NewClient(clientID, *serverAddr, session)
-	if err := client.Register(conn); err != nil {
-		log.Fatalf("registration failed: %v", err)
-	}
-	log.Println("registered with rendezvous server")
-
-	session.Start()
-	manager := NewConnectionManagerWithPort(clientID, *serverAddr, session.Listener(), session, resolvedPort)
-	manager.SetLocalEndpoints(client.localIPs, client.localPort, client.publicIP, client.publicPort)
+	client := NewClient(clientID, *serverAddr)
+	manager := NewConnectionManager(clientID, *serverAddr)
+	manager.SetSessionSetter(client.SetSession)
 	go handleSignals(client, cancel)
 	go client.StartPolling(ctx, manager)
 

@@ -8,27 +8,13 @@ import (
 
 type registerRequest struct {
 	ID         string   `json:"id"`
-	LocalIPs   []string `json:"local_ips"`
-	LocalPort  int      `json:"local_port"`
-	PublicIP   string   `json:"public_ip"`
-	PublicPort int      `json:"public_port"`
-	PublicIPv6 string   `json:"public_ipv6,omitempty"`
+	Ufrag      string   `json:"ufrag"`
+	Password   string   `json:"password"`
+	Candidates []string `json:"candidates"`
+	TTLSeconds int      `json:"ttl_seconds"`
 }
 
 type lookupRequest struct {
-	ID string `json:"id"`
-}
-
-type connectIntentRequest struct {
-	FromID     string   `json:"from_id"`
-	ToID       string   `json:"to_id"`
-	LocalIPs   []string `json:"local_ips"`
-	LocalPort  int      `json:"local_port"`
-	PublicIP   string   `json:"public_ip"`
-	PublicPort int      `json:"public_port"`
-}
-
-type pollIntentRequest struct {
 	ID string `json:"id"`
 }
 
@@ -36,69 +22,61 @@ type unregisterRequest struct {
 	ID string `json:"id"`
 }
 
+type connectIntentRequest struct {
+	FromID     string `json:"from_id"`
+	ToID       string `json:"to_id"`
+	TTLSeconds int    `json:"ttl_seconds"`
+}
+
+type pollIntentRequest struct {
+	ID string `json:"id"`
+}
+
 type lookupResponse struct {
 	ID         string   `json:"id"`
-	LocalIPs   []string `json:"local_ips"`
-	LocalPort  int      `json:"local_port"`
-	PublicIP   string   `json:"public_ip"`
-	PublicPort int      `json:"public_port"`
-	PublicIPv6 string   `json:"public_ipv6,omitempty"`
+	Ufrag      string   `json:"ufrag"`
+	Password   string   `json:"password"`
+	Candidates []string `json:"candidates"`
 }
 
-type PeerInfo struct {
+type IceInfo struct {
 	ID         string
-	LocalIPs   []string
-	LocalPort  int
-	PublicIP   string
-	PublicPort int
-	PublicIPv6 string
+	Ufrag      string
+	Password   string
+	Candidates []string
 }
 
-type PeerEndpoint struct {
-	IP   string
-	Port int
-}
-
-func registerWithServer(serverAddr, clientID string, localIPs []string, localPort int, publicIP string, publicPort int, publicIPv6 string) error {
+func registerICE(serverAddr, clientID string, info IceInfo, ttlSeconds int) error {
 	payload := registerRequest{
 		ID:         clientID,
-		LocalIPs:   localIPs,
-		LocalPort:  localPort,
-		PublicIP:   publicIP,
-		PublicPort: publicPort,
-		PublicIPv6: publicIPv6,
+		Ufrag:      info.Ufrag,
+		Password:   info.Password,
+		Candidates: info.Candidates,
+		TTLSeconds: ttlSeconds,
 	}
-	log.Printf("registering client_id=%s local_port=%d public=%s:%d public_ipv6=%s local_ips=%v", clientID, localPort, publicIP, publicPort, publicIPv6, localIPs)
+	log.Printf("registering ICE info client_id=%s candidates=%d ttl=%ds", clientID, len(info.Candidates), ttlSeconds)
 	return postJSON(serverAddr, "/register", payload, nil, http.StatusOK)
 }
 
-func lookupPeer(serverAddr, targetID string) (PeerEndpoint, error) {
-	info, err := lookupPeerInfo(serverAddr, targetID)
-	if err != nil {
-		return PeerEndpoint{}, err
-	}
-	endpoint := PeerEndpoint{
-		IP:   info.PublicIP,
-		Port: info.PublicPort,
-	}
-	log.Printf("lookup ok target=%s udp_endpoint=%s:%d", targetID, endpoint.IP, endpoint.Port)
-	return endpoint, nil
-}
-
-func lookupPeerInfo(serverAddr, targetID string) (PeerInfo, error) {
+func lookupICE(serverAddr, targetID string) (IceInfo, bool, error) {
 	payload := lookupRequest{ID: targetID}
 	var peer lookupResponse
-	if err := postJSON(serverAddr, "/lookup", payload, &peer, http.StatusOK); err != nil {
-		return PeerInfo{}, err
+	status, err := postJSONWithStatus(serverAddr, "/lookup", payload, &peer)
+	if err != nil {
+		return IceInfo{}, false, err
 	}
-	return PeerInfo{
+	if status == http.StatusNotFound {
+		return IceInfo{}, false, nil
+	}
+	if status != http.StatusOK {
+		return IceInfo{}, false, fmt.Errorf("unexpected status: %d", status)
+	}
+	return IceInfo{
 		ID:         peer.ID,
-		LocalIPs:   peer.LocalIPs,
-		LocalPort:  peer.LocalPort,
-		PublicIP:   peer.PublicIP,
-		PublicPort: peer.PublicPort,
-		PublicIPv6: peer.PublicIPv6,
-	}, nil
+		Ufrag:      peer.Ufrag,
+		Password:   peer.Password,
+		Candidates: peer.Candidates,
+	}, true, nil
 }
 
 func unregisterWithServer(serverAddr, clientID string) error {
@@ -106,59 +84,39 @@ func unregisterWithServer(serverAddr, clientID string) error {
 	return postJSON(serverAddr, "/unregister", payload, nil, http.StatusOK, http.StatusNotFound)
 }
 
-func sendConnectIntent(serverAddr, fromID, toID string, localIPs []string, localPort int, publicIP string, publicPort int) error {
+func sendConnectIntent(serverAddr, fromID, toID string, ttlSeconds int) error {
 	payload := connectIntentRequest{
 		FromID:     fromID,
 		ToID:       toID,
-		LocalIPs:   localIPs,
-		LocalPort:  localPort,
-		PublicIP:   publicIP,
-		PublicPort: publicPort,
+		TTLSeconds: ttlSeconds,
 	}
-	log.Printf("intent sent from=%s to=%s public=%s:%d local_port=%d", fromID, toID, publicIP, publicPort, localPort)
+	log.Printf("intent sent from=%s to=%s", fromID, toID)
 	return postJSON(serverAddr, "/intent", payload, nil, http.StatusOK)
 }
 
-func pollConnectIntent(serverAddr, clientID string) (PeerInfo, bool, error) {
+func pollConnectIntent(serverAddr, clientID string) (IceInfo, bool, error) {
 	payload := pollIntentRequest{ID: clientID}
 	var peer lookupResponse
 	status, err := postJSONWithStatus(serverAddr, "/poll", payload, &peer)
 	if err != nil {
-		return PeerInfo{}, false, err
+		return IceInfo{}, false, err
 	}
 	if status == http.StatusNotFound {
-		return PeerInfo{}, false, nil
+		return IceInfo{}, false, nil
 	}
 	if status != http.StatusOK {
-		return PeerInfo{}, false, fmt.Errorf("unexpected status: %d", status)
+		return IceInfo{}, false, fmt.Errorf("unexpected status: %d", status)
 	}
-	return PeerInfo{
+	return IceInfo{
 		ID:         peer.ID,
-		LocalIPs:   peer.LocalIPs,
-		LocalPort:  peer.LocalPort,
-		PublicIP:   peer.PublicIP,
-		PublicPort: peer.PublicPort,
-		PublicIPv6: peer.PublicIPv6,
+		Ufrag:      peer.Ufrag,
+		Password:   peer.Password,
+		Candidates: peer.Candidates,
 	}, true, nil
 }
 
-func unregisterAndExit(serverAddr, clientID string) {
-	if err := unregisterWithServer(serverAddr, clientID); err != nil {
-		log.Printf("unregister failed: %v", err)
-	}
+// RegisterICE is a test-friendly wrapper around registerICE.
+func RegisterICE(serverAddr, clientID string, info IceInfo, ttlSeconds int) error {
+	return registerICE(serverAddr, clientID, info, ttlSeconds)
 }
 
-// RegisterWithServer is a test-friendly wrapper around registerWithServer.
-func RegisterWithServer(serverAddr, clientID string, localIPs []string, localPort int, publicIP string, publicPort int, publicIPv6 string) error {
-	return registerWithServer(serverAddr, clientID, localIPs, localPort, publicIP, publicPort, publicIPv6)
-}
-
-// LookupPeer is a test-friendly wrapper around lookupPeer.
-func LookupPeer(serverAddr, targetID string) (PeerEndpoint, error) {
-	return lookupPeer(serverAddr, targetID)
-}
-
-// UnregisterWithServer is a test-friendly wrapper around unregisterWithServer.
-func UnregisterWithServer(serverAddr, clientID string) error {
-	return unregisterWithServer(serverAddr, clientID)
-}

@@ -5,48 +5,25 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
+	"sync"
 	"time"
 )
 
 type Client struct {
 	clientID   string
 	serverAddr string
-	session    *ChuteSession
-	localIPs   []string
-	localPort  int
-	publicIP   string
-	publicPort int
+	receive    chan []byte
+
+	sessionMu sync.RWMutex
+	session   *ChuteSession
 }
 
-func NewClient(clientID, serverAddr string, session *ChuteSession) *Client {
+func NewClient(clientID, serverAddr string) *Client {
 	return &Client{
 		clientID:   clientID,
 		serverAddr: serverAddr,
-		session:    session,
+		receive:    make(chan []byte, 16),
 	}
-}
-
-func (c *Client) Register(conn *net.UDPConn) error {
-	localIPs, err := detectLocalIPs()
-	if err != nil {
-		return err
-	}
-	localPort := conn.LocalAddr().(*net.UDPAddr).Port
-	ip, port, err := discoverPublicEndpoint(conn)
-	if err != nil {
-		return err
-	}
-
-	publicIPv6 := ""
-	log.Printf("client endpoints local_ips=%v local_port=%d public=%s:%d", localIPs, localPort, ip, port)
-
-	c.localIPs = localIPs
-	c.localPort = localPort
-	c.publicIP = ip
-	c.publicPort = port
-
-	return registerWithServer(c.serverAddr, c.clientID, localIPs, localPort, ip, port, publicIPv6)
 }
 
 func (c *Client) Unregister() error {
@@ -54,10 +31,11 @@ func (c *Client) Unregister() error {
 }
 
 func (c *Client) SendMessage(targetID string, data []byte) error {
-	if !c.session.IsConnected() {
+	session := c.getSession()
+	if session == nil || !session.IsConnected() {
 		return errors.New("no active session")
 	}
-	activePeer := c.session.CurrentPeerID()
+	activePeer := session.CurrentPeerID()
 	if targetID == "" {
 		targetID = activePeer
 	}
@@ -67,7 +45,7 @@ func (c *Client) SendMessage(targetID string, data []byte) error {
 	if activePeer != "" && activePeer != targetID {
 		return fmt.Errorf("connected to %s", activePeer)
 	}
-	return c.session.Send(data)
+	return session.Send(data)
 }
 
 func (c *Client) StartPolling(ctx context.Context, manager *ConnectionManager) {
@@ -82,8 +60,6 @@ func (c *Client) StartPolling(ctx context.Context, manager *ConnectionManager) {
 			if c.IsConnected() {
 				continue
 			}
-			log.Printf("poll tick (idle=%t)", !c.IsConnected())
-
 			intent, ok, err := pollConnectIntent(c.serverAddr, c.clientID)
 			if err != nil {
 				log.Printf("poll failed: %v", err)
@@ -101,13 +77,42 @@ func (c *Client) StartPolling(ctx context.Context, manager *ConnectionManager) {
 }
 
 func (c *Client) Disconnect() error {
-	return c.session.Close()
+	session := c.getSession()
+	if session == nil {
+		return nil
+	}
+	return session.Close()
 }
 
 func (c *Client) IsConnected() bool {
-	return c.session.IsConnected()
+	session := c.getSession()
+	if session == nil {
+		return false
+	}
+	return session.IsConnected()
 }
 
 func (c *Client) ReceiveChan() <-chan []byte {
-	return c.session.ReceiveChan
+	return c.receive
+}
+
+func (c *Client) SetSession(session *ChuteSession) {
+	c.sessionMu.Lock()
+	c.session = session
+	c.sessionMu.Unlock()
+
+	if session == nil {
+		return
+	}
+	go func() {
+		for msg := range session.ReceiveChan {
+			c.receive <- msg
+		}
+	}()
+}
+
+func (c *Client) getSession() *ChuteSession {
+	c.sessionMu.RLock()
+	defer c.sessionMu.RUnlock()
+	return c.session
 }

@@ -38,9 +38,11 @@ type ChuteSession struct {
 	listener   *quic.Listener
 	conn       quic.Connection
 	acceptOnce sync.Once
+	onClose    func()
+	closeOnce  sync.Once
 }
 
-func NewChuteSession(conn *net.UDPConn, localID string) *ChuteSession {
+func NewChuteSession(conn net.PacketConn, localID string) *ChuteSession {
 	transport := &quic.Transport{Conn: conn}
 	return &ChuteSession{
 		LocalID:     localID,
@@ -120,6 +122,7 @@ func (s *ChuteSession) Close() error {
 		_ = conn.CloseWithError(0, "session closed")
 	}
 	log.Printf("session closed")
+	s.runOnClose()
 	return nil
 }
 
@@ -127,6 +130,9 @@ func (s *ChuteSession) acceptLoop() {
 	for {
 		conn, err := s.listener.Accept(context.Background())
 		if err != nil {
+			if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
+				return
+			}
 			log.Printf("quic accept failed: %v", err)
 			continue
 		}
@@ -333,9 +339,11 @@ func (s *ChuteSession) handleDisconnect(err error) {
 
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) {
 		log.Printf("session disconnected")
+		s.runOnClose()
 		return
 	}
 	log.Printf("session disconnected err=%v", err)
+	s.runOnClose()
 }
 
 func quicConfig() *quic.Config {
@@ -379,4 +387,21 @@ func clientTLSConfig() *tls.Config {
 		InsecureSkipVerify: true,
 		NextProtos:         []string{nextProto},
 	}
+}
+
+func (s *ChuteSession) SetOnClose(fn func()) {
+	s.Mutex.Lock()
+	s.onClose = fn
+	s.Mutex.Unlock()
+}
+
+func (s *ChuteSession) runOnClose() {
+	s.closeOnce.Do(func() {
+		s.Mutex.Lock()
+		fn := s.onClose
+		s.Mutex.Unlock()
+		if fn != nil {
+			fn()
+		}
+	})
 }
