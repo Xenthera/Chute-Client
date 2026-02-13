@@ -16,6 +16,9 @@ type Client struct {
 
 	sessionMu sync.RWMutex
 	session   *ChuteSession
+
+	pendingMu     sync.Mutex
+	pendingIntent *IceInfo
 }
 
 // Construction
@@ -71,9 +74,8 @@ func (c *Client) StartPolling(ctx context.Context, manager *ConnectionManager) {
 			if !ok {
 				continue
 			}
-			log.Printf("incoming connection request from %s", intent.ID)
-			if _, err := manager.ConnectWithPeerInfo(intent); err != nil {
-				log.Printf("connect back failed: %v", err)
+			if c.setPendingIntent(intent) {
+				log.Printf("incoming connection request from %s", intent.ID)
 			}
 		}
 	}
@@ -129,4 +131,29 @@ func (c *Client) getSession() *ChuteSession {
 	c.sessionMu.RLock()
 	defer c.sessionMu.RUnlock()
 	return c.session
+}
+
+func (c *Client) setPendingIntent(intent IceInfo) bool {
+	c.pendingMu.Lock()
+	defer c.pendingMu.Unlock()
+	if c.pendingIntent != nil {
+		return false
+	}
+	c.pendingIntent = &intent
+	return true
+}
+
+func (c *Client) getPendingIntent() (IceInfo, bool) {
+	c.pendingMu.Lock()
+	defer c.pendingMu.Unlock()
+	if c.pendingIntent == nil {
+		return IceInfo{}, false
+	}
+	return *c.pendingIntent, true
+}
+
+func (c *Client) clearPendingIntent() {
+	c.pendingMu.Lock()
+	c.pendingIntent = nil
+	c.pendingMu.Unlock()
 }

@@ -11,6 +11,10 @@ type MessageResponse = {
   messages: string[];
 };
 
+type PendingResponse = {
+  id: string;
+};
+
 const backendURL = "http://127.0.0.1:8787";
 
 const statusDot = document.getElementById("status-dot") as HTMLSpanElement | null;
@@ -21,6 +25,10 @@ const peerInput = document.getElementById("peer-id") as HTMLInputElement | null;
 const connectButton = document.getElementById("connect") as HTMLButtonElement | null;
 const messageInput = document.getElementById("message-input") as HTMLInputElement | null;
 const messagesBox = document.getElementById("messages") as HTMLDivElement | null;
+const acceptModal = document.getElementById("accept-modal") as HTMLDivElement | null;
+const pendingIdLabel = document.getElementById("pending-id") as HTMLParagraphElement | null;
+const acceptButton = document.getElementById("accept-btn") as HTMLButtonElement | null;
+const declineButton = document.getElementById("decline-btn") as HTMLButtonElement | null;
 
 const appendMessage = (text: string, kind: "local" | "remote" | "system" = "system") => {
   if (!messagesBox) {
@@ -31,6 +39,26 @@ const appendMessage = (text: string, kind: "local" | "remote" | "system" = "syst
   line.dataset.kind = kind;
   messagesBox.appendChild(line);
   messagesBox.scrollTop = messagesBox.scrollHeight;
+};
+
+let pendingPeerId = "";
+
+const showPendingModal = (peerId: string) => {
+  if (!acceptModal || !pendingIdLabel) {
+    return;
+  }
+  pendingPeerId = peerId;
+  const displayId = formatIdGroups(peerId) || "--";
+  pendingIdLabel.textContent = `Peer: ${displayId}`;
+  acceptModal.style.display = "flex";
+};
+
+const hidePendingModal = () => {
+  if (!acceptModal) {
+    return;
+  }
+  acceptModal.style.display = "none";
+  pendingPeerId = "";
 };
 
 const setConnectButtonState = (connected: boolean) => {
@@ -138,6 +166,34 @@ const disconnectFromPeer = async () => {
   }
 };
 
+const acceptPending = async () => {
+  if (!pendingPeerId) {
+    hidePendingModal();
+    return;
+  }
+  try {
+    await postJSON("/accept", {});
+    appendMessage(`Accepted connection from ${formatIdGroups(pendingPeerId) || pendingPeerId}.`, "system");
+    hidePendingModal();
+  } catch (err) {
+    appendMessage(`Accept failed: ${(err as Error).message}`);
+  }
+};
+
+const declinePending = async () => {
+  if (!pendingPeerId) {
+    hidePendingModal();
+    return;
+  }
+  try {
+    await postJSON("/decline", {});
+    appendMessage(`Declined connection from ${formatIdGroups(pendingPeerId) || pendingPeerId}.`, "system");
+    hidePendingModal();
+  } catch (err) {
+    appendMessage(`Decline failed: ${(err as Error).message}`);
+  }
+};
+
 const sendMessage = async () => {
   if (!messageInput) {
     return;
@@ -193,8 +249,31 @@ const pollMessages = async () => {
   }
 };
 
+const pollPending = async () => {
+  if (pendingPeerId) {
+    return;
+  }
+  try {
+    const resp = await fetch(`${backendURL}/pending`);
+    if (resp.status === 204) {
+      return;
+    }
+    if (!resp.ok) {
+      return;
+    }
+    const payload = (await resp.json()) as PendingResponse;
+    if (payload.id) {
+      showPendingModal(payload.id);
+    }
+  } catch {
+    return;
+  }
+};
+
 const init = async () => {
   appendMessage("Chute GUI Running");
+  acceptButton?.addEventListener("click", acceptPending);
+  declineButton?.addEventListener("click", declinePending);
   connectButton?.addEventListener("click", () => {
     const isConnected = statusText?.textContent?.startsWith("Connected to");
     if (isConnected) {
@@ -221,6 +300,7 @@ const init = async () => {
   pollStatus();
   setInterval(pollStatus, 1000);
   setInterval(pollMessages, 500);
+  setInterval(pollPending, 1000);
 };
 
 window.addEventListener("DOMContentLoaded", init);

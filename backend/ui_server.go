@@ -39,6 +39,10 @@ type uiMessageResponse struct {
 	Messages []string `json:"messages"`
 }
 
+type uiPendingResponse struct {
+	ID string `json:"id"`
+}
+
 func startUIServer(ctx context.Context, addr string, client *Client, manager *ConnectionManager, serverAddr, clientID string) error {
 	server := &uiServer{
 		client:      client,
@@ -50,6 +54,9 @@ func startUIServer(ctx context.Context, addr string, client *Client, manager *Co
 	mux := http.NewServeMux()
 	mux.HandleFunc("/status", server.withCORS(server.handleStatus))
 	mux.HandleFunc("/connect", server.withCORS(server.handleConnect))
+	mux.HandleFunc("/pending", server.withCORS(server.handlePending))
+	mux.HandleFunc("/accept", server.withCORS(server.handleAccept))
+	mux.HandleFunc("/decline", server.withCORS(server.handleDecline))
 	mux.HandleFunc("/disconnect", server.withCORS(server.handleDisconnect))
 	mux.HandleFunc("/send", server.withCORS(server.handleSend))
 	mux.HandleFunc("/messages", server.withCORS(server.handleMessages))
@@ -155,6 +162,50 @@ func (s *uiServer) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+}
+
+func (s *uiServer) handlePending(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	intent, ok := s.client.getPendingIntent()
+	if !ok {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeJSON(w, http.StatusOK, uiPendingResponse{ID: intent.ID})
+}
+
+func (s *uiServer) handleAccept(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	intent, ok := s.client.getPendingIntent()
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if _, err := s.manager.ConnectWithPeerInfo(intent); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	s.client.clearPendingIntent()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "accepted"})
+}
+
+func (s *uiServer) handleDecline(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := s.client.getPendingIntent(); !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	s.client.clearPendingIntent()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "declined"})
 }
 
 func (s *uiServer) handleMessages(w http.ResponseWriter, r *http.Request) {

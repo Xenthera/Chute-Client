@@ -66,6 +66,9 @@ func lookupICE(serverAddr, targetID string) (IceInfo, bool, error) {
 	if err != nil {
 		return IceInfo{}, false, err
 	}
+	if status == http.StatusTooManyRequests {
+		return IceInfo{}, false, rateLimitError{}
+	}
 	if status == http.StatusNotFound {
 		return IceInfo{}, false, nil
 	}
@@ -78,6 +81,12 @@ func lookupICE(serverAddr, targetID string) (IceInfo, bool, error) {
 		Password:   peer.Password,
 		Candidates: peer.Candidates,
 	}, true, nil
+}
+
+type rateLimitError struct{}
+
+func (rateLimitError) Error() string {
+	return "rate limited by rendezvous server"
 }
 
 // Intents

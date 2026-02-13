@@ -19,6 +19,7 @@ const (
 	iceGatherTimeout      = 10 * time.Second
 	iceConnectTimeout     = 20 * time.Second
 	iceLookupPollInterval = 1 * time.Second
+	rateLimitBackoff      = 3 * time.Second
 )
 
 type ConnectionManager struct {
@@ -271,6 +272,10 @@ func waitForICEInfo(serverAddr, targetID string, timeout time.Duration) (IceInfo
 	for time.Now().Before(deadline) {
 		info, ok, err := lookupICE(serverAddr, targetID)
 		if err != nil {
+			if _, limited := err.(rateLimitError); limited {
+				time.Sleep(rateLimitBackoff)
+				continue
+			}
 			return IceInfo{}, err
 		}
 		if ok {
