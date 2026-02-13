@@ -7,7 +7,7 @@
       :root {
         --bg: #e6e8ec;
         --surface: #eef0f3;
-        --surface-2: #e4e7eb;
+        --surface-2: #e9edf1;
         --text: #4a4f57;
         --muted: #7b818b;
         --accent: #5c6f7c;
@@ -50,14 +50,14 @@
         width: 12px;
         height: 12px;
         border-radius: 50%;
-        background: var(--danger);
-        box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.15),
-          inset -2px -2px 4px rgba(255, 255, 255, 0.8);
+        background: #ff5f56;
+        border: 1px solid #e04843;
+        box-shadow: none;
       }
       .status-dot.connected {
-        background: #6ccf88;
-        box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.12),
-          inset -2px -2px 4px rgba(255, 255, 255, 0.9);
+        background: #28c840;
+        border: 1px solid #1fa433;
+        box-shadow: none;
       }
       .row {
         display: flex;
@@ -69,18 +69,16 @@
         font-size: 14px;
         color: var(--text);
         background: var(--surface);
-        border: none;
-        border-radius: 14px;
+        border: 1px solid #c3c7cf;
+        border-radius: 6px;
         outline: none;
-        box-shadow: inset 3px 3px 6px rgba(168, 176, 185, 0.55),
-          inset -3px -3px 6px rgba(255, 255, 255, 0.95);
+        box-shadow: none;
       }
       .row input::placeholder {
         color: var(--muted);
       }
       .row input:focus {
-        box-shadow: inset 4px 4px 8px rgba(168, 176, 185, 0.65),
-          inset -4px -4px 8px rgba(255, 255, 255, 0.98);
+        box-shadow: none;
       }
       .row button {
         padding: 12px 18px;
@@ -105,13 +103,12 @@
       .scrollbox {
         flex: 1;
         background: var(--surface-2);
-        border: none;
-        border-radius: 16px;
+        border: 1px solid #c3c7cf;
+        border-radius: 6px;
         padding: 14px;
         overflow-y: auto;
         min-height: 120px;
-        box-shadow: inset 3px 3px 6px rgba(168, 176, 185, 0.55),
-          inset -3px -3px 6px rgba(255, 255, 255, 0.95);
+        box-shadow: none;
       }
       .rendezvous-status {
         font-size: 11px;

@@ -53,11 +53,30 @@ const setRendezvousStatus = (healthy: boolean, checked: boolean) => {
   rendezvousStatus.textContent = healthy ? "Rendezvous: Online" : "Rendezvous: Offline";
 };
 
+const formatIdGroups = (value: string) => {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) {
+    return "";
+  }
+  let out = "";
+  let count = 0;
+  for (let i = digits.length - 1; i >= 0; i -= 1) {
+    out = digits[i] + out;
+    count += 1;
+    if (count === 3 && i !== 0) {
+      out = " " + out;
+      count = 0;
+    }
+  }
+  return out;
+};
+
 const setClientId = (clientId: string) => {
   if (!clientIdLabel) {
     return;
   }
-  clientIdLabel.textContent = clientId ? `Your ID: ${clientId}` : "Your ID: --";
+  const formatted = formatIdGroups(clientId);
+  clientIdLabel.textContent = formatted ? `Your ID: ${formatted}` : "Your ID: --";
 };
 
 const postJSON = async <T>(path: string, payload: unknown): Promise<T> => {
@@ -78,7 +97,7 @@ const connectToPeer = async () => {
     return;
   }
   const raw = peerInput.value.trim();
-  const targetId = raw.replace(/\s+/g, "");
+  const targetId = raw.replace(/\D/g, "");
   if (!targetId) {
     appendMessage("Enter a peer ID before connecting.");
     return;
@@ -151,6 +170,16 @@ const pollMessages = async () => {
 const init = async () => {
   appendMessage("Chute GUI Running");
   connectButton?.addEventListener("click", connectToPeer);
+  peerInput?.addEventListener("input", () => {
+    if (!peerInput) {
+      return;
+    }
+    const cursorAtEnd = peerInput.selectionStart === peerInput.value.length;
+    peerInput.value = formatIdGroups(peerInput.value);
+    if (cursorAtEnd) {
+      peerInput.setSelectionRange(peerInput.value.length, peerInput.value.length);
+    }
+  });
   messageInput?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       sendMessage();
