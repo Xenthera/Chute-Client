@@ -46,6 +46,7 @@ type IceInfo struct {
 	Candidates []string
 }
 
+// ICE registration & lookup
 func registerICE(serverAddr, clientID string, info IceInfo, ttlSeconds int) error {
 	payload := registerRequest{
 		ID:         clientID,
@@ -79,11 +80,7 @@ func lookupICE(serverAddr, targetID string) (IceInfo, bool, error) {
 	}, true, nil
 }
 
-func unregisterWithServer(serverAddr, clientID string) error {
-	payload := unregisterRequest{ID: clientID}
-	return postJSON(serverAddr, "/unregister", payload, nil, http.StatusOK, http.StatusNotFound)
-}
-
+// Intents
 func sendConnectIntent(serverAddr, fromID, toID string, ttlSeconds int) error {
 	payload := connectIntentRequest{
 		FromID:     fromID,
@@ -113,6 +110,12 @@ func pollConnectIntent(serverAddr, clientID string) (IceInfo, bool, error) {
 		Password:   peer.Password,
 		Candidates: peer.Candidates,
 	}, true, nil
+}
+
+// Unregister
+func unregisterWithServer(serverAddr, clientID string) error {
+	payload := unregisterRequest{ID: clientID}
+	return postJSON(serverAddr, "/unregister", payload, nil, http.StatusOK, http.StatusNotFound)
 }
 
 // RegisterICE is a test-friendly wrapper around registerICE.

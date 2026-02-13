@@ -31,6 +31,7 @@ type ConnectionManager struct {
 	iceAgent *ice.Agent
 }
 
+// Construction & wiring
 func NewConnectionManager(localID, serverAddr string) *ConnectionManager {
 	return &ConnectionManager{
 		localID:    localID,
@@ -42,6 +43,7 @@ func (m *ConnectionManager) SetSessionSetter(setter func(*ChuteSession)) {
 	m.sessionSetter = setter
 }
 
+// Public entrypoints
 func (m *ConnectionManager) Connect(targetID string) (*ChuteSession, error) {
 	if targetID == "" {
 		return nil, errors.New("missing target id")
@@ -88,6 +90,7 @@ func (m *ConnectionManager) ConnectWithPeerInfo(info IceInfo) (*ChuteSession, er
 	return m.startICE(agent, info.ID, info)
 }
 
+// ICE setup & gather
 func (m *ConnectionManager) createICEAgent() (*ice.Agent, IceInfo, error) {
 	stunServer := stunServerAddr()
 	url, err := ice.ParseURL("stun:" + stunServer)
@@ -154,6 +157,7 @@ func gatherCandidates(agent *ice.Agent) ([]string, error) {
 	return candidates, nil
 }
 
+// ICE connect & QUIC bootstrap
 func (m *ConnectionManager) startICE(agent *ice.Agent, targetID string, remote IceInfo) (*ChuteSession, error) {
 	m.setICEAgent(agent)
 	agent.OnConnectionStateChange(func(state ice.ConnectionState) {
@@ -225,6 +229,7 @@ func (m *ConnectionManager) startICE(agent *ice.Agent, targetID string, remote I
 	return session, nil
 }
 
+// ICE lifecycle
 func (m *ConnectionManager) setICEAgent(agent *ice.Agent) {
 	m.iceMu.Lock()
 	m.iceAgent = agent
@@ -241,6 +246,7 @@ func (m *ConnectionManager) closeICE() {
 	}
 }
 
+// Signaling helpers
 func waitForICEInfo(serverAddr, targetID string, timeout time.Duration) (IceInfo, error) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -263,6 +269,7 @@ func stunServerAddr() string {
 	return "stun.l.google.com:19302"
 }
 
+// ICE -> net.PacketConn adapter
 type icePacketConn struct {
 	conn *ice.Conn
 }
@@ -298,18 +305,6 @@ func (c *icePacketConn) SetReadDeadline(t time.Time) error {
 
 func (c *icePacketConn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
-}
-
-func endpointFromNetAddr(addr net.Addr) (PeerEndpoint, error) {
-	host, portStr, err := net.SplitHostPort(addr.String())
-	if err != nil {
-		return PeerEndpoint{}, err
-	}
-	port, err := net.LookupPort("udp", portStr)
-	if err != nil {
-		return PeerEndpoint{}, err
-	}
-	return PeerEndpoint{IP: host, Port: port}, nil
 }
 
 func waitForSession(session *ChuteSession, timeout time.Duration) error {

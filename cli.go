@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+// CLI loop
 func runCLI(ctx context.Context, cancel context.CancelFunc, client *Client, manager *ConnectionManager, clientID, serverAddr string) {
 	scanner := bufio.NewScanner(os.Stdin)
 	printHelp()
@@ -71,6 +72,7 @@ func runCLI(ctx context.Context, cancel context.CancelFunc, client *Client, mana
 	}
 }
 
+// Help & parsing
 func printHelp() {
 	fmt.Println("commands:")
 	fmt.Println("  connect <id>")
@@ -98,6 +100,7 @@ func parseSendCommand(line string) (string, bool) {
 	return message, true
 }
 
+// Output
 func printReceived(ctx context.Context, client *Client) {
 	for {
 		select {

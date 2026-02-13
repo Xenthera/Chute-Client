@@ -18,6 +18,7 @@ type Client struct {
 	session   *ChuteSession
 }
 
+// Construction
 func NewClient(clientID, serverAddr string) *Client {
 	return &Client{
 		clientID:   clientID,
@@ -26,6 +27,7 @@ func NewClient(clientID, serverAddr string) *Client {
 	}
 }
 
+// Connection lifecycle
 func (c *Client) Unregister() error {
 	return unregisterWithServer(c.serverAddr, c.clientID)
 }
@@ -48,6 +50,7 @@ func (c *Client) SendMessage(targetID string, data []byte) error {
 	return session.Send(data)
 }
 
+// Polling
 func (c *Client) StartPolling(ctx context.Context, manager *ConnectionManager) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -76,6 +79,7 @@ func (c *Client) StartPolling(ctx context.Context, manager *ConnectionManager) {
 	}
 }
 
+// Session state
 func (c *Client) Disconnect() error {
 	session := c.getSession()
 	if session == nil {
@@ -96,6 +100,7 @@ func (c *Client) ReceiveChan() <-chan []byte {
 	return c.receive
 }
 
+// Session wiring
 func (c *Client) SetSession(session *ChuteSession) {
 	c.sessionMu.Lock()
 	c.session = session
@@ -111,6 +116,7 @@ func (c *Client) SetSession(session *ChuteSession) {
 	}()
 }
 
+// Internal helpers
 func (c *Client) getSession() *ChuteSession {
 	c.sessionMu.RLock()
 	defer c.sessionMu.RUnlock()

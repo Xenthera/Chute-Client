@@ -14,6 +14,7 @@ func main() {
 	serverAddr := flag.String("server", "localhost:8080", "rendezvous server address (host:port)")
 	flag.Parse()
 
+	// Startup
 	clientID, err := generateClientID()
 	if err != nil {
 		panic(err)
@@ -35,6 +36,7 @@ func main() {
 	runCLI(ctx, cancel, client, manager, clientID, *serverAddr)
 }
 
+// Shutdown
 func handleSignals(client *Client, cancel context.CancelFunc) {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
