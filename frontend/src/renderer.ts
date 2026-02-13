@@ -33,6 +33,13 @@ const appendMessage = (text: string, kind: "local" | "remote" | "system" = "syst
   messagesBox.scrollTop = messagesBox.scrollHeight;
 };
 
+const setConnectButtonState = (connected: boolean) => {
+  if (!connectButton) {
+    return;
+  }
+  connectButton.textContent = connected ? "Disconnect" : "Connect";
+};
+
 const setConnectionStatus = (connected: boolean, peerId: string) => {
   if (statusDot) {
     statusDot.classList.toggle("connected", connected);
@@ -40,6 +47,8 @@ const setConnectionStatus = (connected: boolean, peerId: string) => {
   if (statusText) {
     statusText.textContent = connected && peerId ? `Connected to ${peerId}` : "Disconnected";
   }
+  setConnectButtonState(connected);
+  currentPeerId = connected ? peerId : "";
 };
 
 const setRendezvousStatus = (healthy: boolean, checked: boolean) => {
@@ -71,12 +80,16 @@ const formatIdGroups = (value: string) => {
   return out;
 };
 
+let currentClientId = "";
+let currentPeerId = "";
+
 const setClientId = (clientId: string) => {
   if (!clientIdLabel) {
     return;
   }
   const formatted = formatIdGroups(clientId);
   clientIdLabel.textContent = formatted ? `Your ID: ${formatted}` : "Your ID: --";
+  currentClientId = clientId;
 };
 
 const postJSON = async <T>(path: string, payload: unknown): Promise<T> => {
@@ -112,6 +125,16 @@ const connectToPeer = async () => {
     appendMessage(`Connected to ${targetId}.`, "system");
   } catch (err) {
     appendMessage(`Connect failed: ${(err as Error).message}`);
+  }
+};
+
+const disconnectFromPeer = async () => {
+  appendMessage("Disconnecting...");
+  try {
+    await postJSON("/disconnect", {});
+    appendMessage("Disconnected.", "system");
+  } catch (err) {
+    appendMessage(`Disconnect failed: ${(err as Error).message}`);
   }
 };
 
@@ -160,7 +183,8 @@ const pollMessages = async () => {
     }
     const payload = (await resp.json()) as MessageResponse;
     if (payload.message) {
-      appendMessage(payload.message, "remote");
+      const displayId = formatIdGroups(currentPeerId) || "Peer";
+      appendMessage(`${displayId}: ${payload.message}`, "remote");
     }
   } catch {
     return;
@@ -169,7 +193,14 @@ const pollMessages = async () => {
 
 const init = async () => {
   appendMessage("Chute GUI Running");
-  connectButton?.addEventListener("click", connectToPeer);
+  connectButton?.addEventListener("click", () => {
+    const isConnected = statusText?.textContent?.startsWith("Connected to");
+    if (isConnected) {
+      disconnectFromPeer();
+      return;
+    }
+    connectToPeer();
+  });
   peerInput?.addEventListener("input", () => {
     if (!peerInput) {
       return;

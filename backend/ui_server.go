@@ -50,6 +50,7 @@ func startUIServer(ctx context.Context, addr string, client *Client, manager *Co
 	mux := http.NewServeMux()
 	mux.HandleFunc("/status", server.withCORS(server.handleStatus))
 	mux.HandleFunc("/connect", server.withCORS(server.handleConnect))
+	mux.HandleFunc("/disconnect", server.withCORS(server.handleDisconnect))
 	mux.HandleFunc("/send", server.withCORS(server.handleSend))
 	mux.HandleFunc("/messages", server.withCORS(server.handleMessages))
 
@@ -168,6 +169,18 @@ func (s *uiServer) handleMessages(w http.ResponseWriter, r *http.Request) {
 	default:
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *uiServer) handleDisconnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if err := s.client.Disconnect(); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

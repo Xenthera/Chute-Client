@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	serverAddr := flag.String("server", "chute-rendezvous-server.fly.dev", "rendezvous server address (host:port)")
+	serverAddr := flag.String("server", "chute-rendezvous-server.fly.dev:8080", "rendezvous server address (host:port)")
 	uiAddr := flag.String("ui", "127.0.0.1:8787", "ui api address (host:port)")
 	flag.Parse()
 
