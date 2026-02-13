@@ -1,2 +1,13 @@
 bin
 .DS_Store
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.tauri/
+frontend/src-tauri/target/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

@@ -33,7 +33,8 @@ func main() {
 	go handleSignals(client, cancel)
 	go client.StartPolling(ctx, manager)
 
-	runCLI(ctx, cancel, client, manager, clientID, *serverAddr)
+	// GUI-first: keep backend running without the CLI loop.
+	<-ctx.Done()
 }
 
 // Shutdown

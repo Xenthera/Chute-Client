@@ -1,0 +1,154 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Chute</title>
+    <style>
+      :root {
+        --bg: #e6e8ec;
+        --surface: #eef0f3;
+        --surface-2: #e4e7eb;
+        --text: #4a4f57;
+        --muted: #7b818b;
+        --accent: #5c6f7c;
+        --danger: #d66f6f;
+        --shadow-dark: rgba(168, 176, 185, 0.6);
+        --shadow-light: rgba(255, 255, 255, 0.9);
+      }
+      body {
+        font-family: "Segoe UI", "Inter", "Roboto", Arial, sans-serif;
+        font-weight: 300;
+        letter-spacing: 0.2px;
+        margin: 0;
+        padding: 20px;
+        background: var(--bg);
+        color: var(--text);
+        height: 100vh;
+        box-sizing: border-box;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        height: 100%;
+        box-sizing: border-box;
+        filter: none;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 300;
+        padding: 8px 12px;
+        border-radius: 14px;
+        background: var(--surface);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
+      }
+      .status-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--danger);
+        box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.15),
+          inset -2px -2px 4px rgba(255, 255, 255, 0.8);
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      .row input {
+        flex: 1;
+        padding: 12px;
+        font-size: 14px;
+        color: var(--text);
+        background: var(--surface);
+        border: none;
+        border-radius: 14px;
+        outline: none;
+        box-shadow: inset 3px 3px 6px rgba(168, 176, 185, 0.55),
+          inset -3px -3px 6px rgba(255, 255, 255, 0.95);
+      }
+      .row input::placeholder {
+        color: var(--muted);
+      }
+      .row input:focus {
+        box-shadow: inset 4px 4px 8px rgba(168, 176, 185, 0.65),
+          inset -4px -4px 8px rgba(255, 255, 255, 0.98);
+      }
+      .row button {
+        padding: 12px 18px;
+        font-size: 14px;
+        cursor: pointer;
+        color: var(--accent);
+        background: var(--surface);
+        border: none;
+        border-radius: 14px;
+        font-weight: 400;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
+      }
+      .row button:hover {
+        filter: brightness(1.02);
+      }
+      .row button:active {
+        box-shadow: inset 3px 3px 6px rgba(168, 176, 185, 0.6),
+          inset -3px -3px 6px rgba(255, 255, 255, 0.95);
+      }
+      .scrollbox {
+        flex: 1;
+        background: var(--surface-2);
+        border: none;
+        border-radius: 16px;
+        padding: 14px;
+        overflow-y: auto;
+        min-height: 120px;
+        box-shadow: inset 3px 3px 6px rgba(168, 176, 185, 0.55),
+          inset -3px -3px 6px rgba(255, 255, 255, 0.95);
+      }
+      .rendezvous-status {
+        font-size: 11px;
+        color: var(--muted);
+        opacity: 0.75;
+        text-align: right;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        padding: 2px 4px 0;
+      }
+      .send-row input {
+        flex: 1;
+      }
+      .scanlines::before {
+        content: none;
+      }
+    </style>
+  </head>
+  <body class="scanlines">
+    <div class="container">
+      <div class="status">
+        <span id="status-dot" class="status-dot" aria-label="connection status"></span>
+        <span id="status-text">Disconnected</span>
+      </div>
+
+      <div class="row">
+        <input id="peer-id" type="text" placeholder="Peer ID" />
+        <button id="connect">Connect</button>
+      </div>
+
+      <div id="messages" class="scrollbox" aria-live="polite"></div>
+
+      <div class="row send-row">
+        <input id="message-input" type="text" placeholder="Type a message..." />
+      </div>
+
+      <div id="rendezvous-status" class="rendezvous-status">
+        Rendezvous: Unregistered
+      </div>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
+
