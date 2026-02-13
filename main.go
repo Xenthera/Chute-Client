@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	serverAddr := flag.String("server", "localhost:8080", "rendezvous server address (host:port)")
+	serverAddr := flag.String("server", "chute-rendezvous-server.fly.dev", "rendezvous server address (host:port)")
 	flag.Parse()
 
 	// Startup

@@ -67,4 +67,3 @@ func sendUDP(conn *net.UDPConn, peerIP string, peerPort int, payload []byte) err
 	}
 	return nil
 }
-
