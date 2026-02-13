@@ -6,7 +6,7 @@ import (
 )
 
 func generateClientID() (string, error) {
-	const digits = 3
+	const digits = 9
 	const maxDigit = 10
 
 	var result [digits]byte
@@ -19,5 +19,12 @@ func generateClientID() (string, error) {
 	}
 
 	return string(result[:]), nil
+}
+
+func formatClientID(id string) string {
+	if len(id) != 9 {
+		return id
+	}
+	return id[0:3] + " " + id[3:6] + " " + id[6:9]
 }
 

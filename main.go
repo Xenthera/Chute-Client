@@ -21,7 +21,7 @@ func main() {
 	}
 
 	fmt.Println("chute client starting")
-	fmt.Printf("client id: %s\n", clientID)
+	fmt.Printf("client id: %s\n", formatClientID(clientID))
 	fmt.Printf("server: %s\n", *serverAddr)
 
 	ctx, cancel := context.WithCancel(context.Background())
