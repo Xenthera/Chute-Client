@@ -9,18 +9,15 @@ This repo has a Go backend and a Tauri (Rust + web) frontend.
 ```
 brew install go
 ```
+Install Wails CLI:
+```
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+```
 
 ### Node.js
 - Node.js 20+ (npm)
 ```
 brew install node@20
-```
-
-### Rust
-- Rust (rustup + cargo)
-```
-curl https://sh.rustup.rs -sSf | sh
-source ~/.cargo/env
 ```
 
 ### System Packages
@@ -36,17 +33,15 @@ xcode-select --install
 ```
 choco install -y golang
 ```
+Install Wails CLI:
+```
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+```
 
 ### Node.js
 - Node.js 20+ (npm)
 ```
 choco install -y nodejs-lts
-```
-
-### Rust
-- Rust (rustup + cargo)
-```
-curl https://sh.rustup.rs -sSf | sh
 ```
 
 ### System Packages
@@ -61,19 +56,16 @@ curl https://sh.rustup.rs -sSf | sh
 sudo apt update
 sudo apt install -y golang
 ```
+Install Wails CLI:
+```
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+```
 
 ### Node.js
 - Node.js 20+ (npm)
 ```
 sudo apt update
 sudo apt install -y nodejs npm
-```
-
-### Rust
-- Rust (rustup + cargo)
-```
-curl https://sh.rustup.rs -sSf | sh
-source ~/.cargo/env
 ```
 
 ### System Packages
@@ -95,18 +87,15 @@ sudo apt install -y \
 ```
 sudo dnf install -y golang
 ```
+Install Wails CLI:
+```
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+```
 
 ### Node.js
 - Node.js 20+ (npm)
 ```
 sudo dnf install -y nodejs npm
-```
-
-### Rust
-- Rust (rustup + cargo)
-```
-curl https://sh.rustup.rs -sSf | sh
-source ~/.cargo/env
 ```
 
 ### System Packages
@@ -129,18 +118,15 @@ sudo dnf install -y \
 ```
 sudo pacman -S --noconfirm go
 ```
+Install Wails CLI:
+```
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+```
 
 ### Node.js
 - Node.js 20+ (npm)
 ```
 sudo pacman -S --noconfirm nodejs npm
-```
-
-### Rust
-- Rust (rustup + cargo)
-```
-curl https://sh.rustup.rs -sSf | sh
-source ~/.cargo/env
 ```
 
 ### System Packages
@@ -155,16 +141,22 @@ sudo pacman -S --noconfirm \
 ```
 
 ### Build
-Backend:
+App (library + GUI runtime):
 ```
-cd backend
+cd app
 go build ./...
 ```
 
-Frontend (Tauri):
+UI (Wails assets):
 ```
-cd frontend
+cd app/ui
 npm install
 npm run build
+```
+
+Wails (desktop app):
+```
+cd app
+wails dev
 ```
 

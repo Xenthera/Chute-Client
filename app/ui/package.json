@@ -1,0 +1,13 @@
+{
+  "name": "chute-client",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-html.js",
+    "dev": "cd .. && \"$(go env GOPATH)/bin/wails\" dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
+

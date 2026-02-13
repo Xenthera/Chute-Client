@@ -46,6 +46,17 @@
         letter-spacing: 1px;
         box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
       }
+      .client-id {
+        margin-left: auto;
+        color: var(--muted);
+        text-transform: none;
+        letter-spacing: 0.2px;
+        font-weight: 400;
+      }
+      .client-id-number {
+        color: #3f444c;
+        font-weight: 700;
+      }
       .status-dot {
         width: 12px;
         height: 12px;
@@ -182,8 +193,8 @@
       <div class="status">
         <span id="status-dot" class="status-dot" aria-label="connection status"></span>
         <span id="status-text">Disconnected</span>
-        <span id="client-id" style="margin-left:auto; color: var(--muted); text-transform:none; letter-spacing:0.2px;">
-          Your ID: --
+        <span id="client-id" class="client-id">
+          Your ID: <span class="client-id-number">--</span>
         </span>
       </div>
 
@@ -214,7 +225,7 @@
       </div>
     </div>
 
-    <script type="module" src="dist/renderer.js"></script>
+    <script type="module" src="renderer.js"></script>
   </body>
 </html>
 

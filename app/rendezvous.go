@@ -15,7 +15,8 @@ type registerRequest struct {
 }
 
 type lookupRequest struct {
-	ID string `json:"id"`
+	ID     string `json:"id"`
+	FromID string `json:"from_id,omitempty"`
 }
 
 type unregisterRequest struct {
@@ -23,6 +24,12 @@ type unregisterRequest struct {
 }
 
 type connectIntentRequest struct {
+	FromID     string `json:"from_id"`
+	ToID       string `json:"to_id"`
+	TTLSeconds int    `json:"ttl_seconds"`
+}
+
+type declineRequest struct {
 	FromID     string `json:"from_id"`
 	ToID       string `json:"to_id"`
 	TTLSeconds int    `json:"ttl_seconds"`
@@ -59,8 +66,8 @@ func registerICE(serverAddr, clientID string, info IceInfo, ttlSeconds int) erro
 	return postJSON(serverAddr, "/register", payload, nil, http.StatusOK)
 }
 
-func lookupICE(serverAddr, targetID string) (IceInfo, bool, error) {
-	payload := lookupRequest{ID: targetID}
+func lookupICE(serverAddr, targetID, fromID string) (IceInfo, bool, error) {
+	payload := lookupRequest{ID: targetID, FromID: fromID}
 	var peer lookupResponse
 	status, err := postJSONWithStatus(serverAddr, "/lookup", payload, &peer)
 	if err != nil {
@@ -68,6 +75,9 @@ func lookupICE(serverAddr, targetID string) (IceInfo, bool, error) {
 	}
 	if status == http.StatusTooManyRequests {
 		return IceInfo{}, false, rateLimitError{}
+	}
+	if status == http.StatusConflict {
+		return IceInfo{}, false, declineError{}
 	}
 	if status == http.StatusNotFound {
 		return IceInfo{}, false, nil
@@ -87,6 +97,12 @@ type rateLimitError struct{}
 
 func (rateLimitError) Error() string {
 	return "rate limited by rendezvous server"
+}
+
+type declineError struct{}
+
+func (declineError) Error() string {
+	return "connection declined"
 }
 
 // Intents
@@ -119,6 +135,16 @@ func pollConnectIntent(serverAddr, clientID string) (IceInfo, bool, error) {
 		Password:   peer.Password,
 		Candidates: peer.Candidates,
 	}, true, nil
+}
+
+func sendDecline(serverAddr, fromID, toID string, ttlSeconds int) error {
+	payload := declineRequest{
+		FromID:     fromID,
+		ToID:       toID,
+		TTLSeconds: ttlSeconds,
+	}
+	log.Printf("decline sent from=%s to=%s", fromID, toID)
+	return postJSON(serverAddr, "/decline", payload, nil, http.StatusOK)
 }
 
 // Unregister

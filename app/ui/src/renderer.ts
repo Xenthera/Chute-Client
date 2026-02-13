@@ -7,15 +7,26 @@ type StatusResponse = {
   rendezvous_checked: boolean;
 };
 
-type MessageResponse = {
-  messages: string[];
-};
+declare global {
+  interface Window {
+    go?: {
+      main?: {
+        App?: {
+          Status: () => Promise<StatusResponse>;
+          Connect: (targetID: string) => Promise<void>;
+          Disconnect: () => Promise<void>;
+          Send: (message: string) => Promise<void>;
+          Pending: () => Promise<string>;
+          Accept: () => Promise<void>;
+          Decline: () => Promise<void>;
+          Messages: () => Promise<string[]>;
+        };
+      };
+    };
+  }
+}
 
-type PendingResponse = {
-  id: string;
-};
-
-const backendURL = "http://127.0.0.1:8787";
+export {};
 
 const statusDot = document.getElementById("status-dot") as HTMLSpanElement | null;
 const statusText = document.getElementById("status-text") as HTMLSpanElement | null;
@@ -39,6 +50,24 @@ const appendMessage = (text: string, kind: "local" | "remote" | "system" = "syst
   line.dataset.kind = kind;
   messagesBox.appendChild(line);
   messagesBox.scrollTop = messagesBox.scrollHeight;
+};
+
+const formatError = (err: unknown) => {
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  if (typeof err === "string" && err) {
+    return err;
+  }
+  try {
+    const serialized = JSON.stringify(err);
+    if (serialized && serialized !== "{}") {
+      return serialized;
+    }
+  } catch {
+    // ignore
+  }
+  return "unknown error";
 };
 
 let pendingPeerId = "";
@@ -116,22 +145,15 @@ const setClientId = (clientId: string) => {
     return;
   }
   const formatted = formatIdGroups(clientId);
-  clientIdLabel.textContent = formatted ? `Your ID: ${formatted}` : "Your ID: --";
+  if (formatted) {
+    clientIdLabel.innerHTML = `Your ID: <span class="client-id-number">${formatted}</span>`;
+  } else {
+    clientIdLabel.innerHTML = "Your ID: <span class=\"client-id-number\">--</span>";
+  }
   currentClientId = clientId;
 };
 
-const postJSON = async <T>(path: string, payload: unknown): Promise<T> => {
-  const resp = await fetch(`${backendURL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(text || resp.statusText);
-  }
-  return resp.json() as Promise<T>;
-};
+const getApp = () => window.go?.main?.App;
 
 const connectToPeer = async () => {
   if (!peerInput) {
@@ -149,20 +171,30 @@ const connectToPeer = async () => {
   }
   appendMessage(`Connecting to ${targetId}...`);
   try {
-    await postJSON("/connect", { target_id: targetId });
+    const app = getApp();
+    if (!app) {
+      appendMessage("App bridge not ready.");
+      return;
+    }
+    await app.Connect(targetId);
     appendMessage(`Connected to ${targetId}.`, "system");
   } catch (err) {
-    appendMessage(`Connect failed: ${(err as Error).message}`);
+    appendMessage(`Connect failed: ${formatError(err)}`);
   }
 };
 
 const disconnectFromPeer = async () => {
   appendMessage("Disconnecting...");
   try {
-    await postJSON("/disconnect", {});
+    const app = getApp();
+    if (!app) {
+      appendMessage("App bridge not ready.");
+      return;
+    }
+    await app.Disconnect();
     appendMessage("Disconnected.", "system");
   } catch (err) {
-    appendMessage(`Disconnect failed: ${(err as Error).message}`);
+    appendMessage(`Disconnect failed: ${formatError(err)}`);
   }
 };
 
@@ -174,10 +206,15 @@ const acceptPending = async () => {
   const peerId = pendingPeerId;
   hidePendingModal();
   try {
-    await postJSON("/accept", {});
+    const app = getApp();
+    if (!app) {
+      appendMessage("App bridge not ready.");
+      return;
+    }
+    await app.Accept();
     appendMessage(`Accepted connection from ${formatIdGroups(peerId) || peerId}.`, "system");
   } catch (err) {
-    appendMessage(`Accept failed: ${(err as Error).message}`);
+    appendMessage(`Accept failed: ${formatError(err)}`);
   }
 };
 
@@ -189,10 +226,15 @@ const declinePending = async () => {
   const peerId = pendingPeerId;
   hidePendingModal();
   try {
-    await postJSON("/decline", {});
+    const app = getApp();
+    if (!app) {
+      appendMessage("App bridge not ready.");
+      return;
+    }
+    await app.Decline();
     appendMessage(`Declined connection from ${formatIdGroups(peerId) || peerId}.`, "system");
   } catch (err) {
-    appendMessage(`Decline failed: ${(err as Error).message}`);
+    appendMessage(`Decline failed: ${formatError(err)}`);
   }
 };
 
@@ -207,19 +249,24 @@ const sendMessage = async () => {
   messageInput.value = "";
   appendMessage(`You: ${text}`, "local");
   try {
-    await postJSON("/send", { message: text });
+    const app = getApp();
+    if (!app) {
+      appendMessage("App bridge not ready.");
+      return;
+    }
+    await app.Send(text);
   } catch (err) {
-    appendMessage(`Send failed: ${(err as Error).message}`);
+    appendMessage(`Send failed: ${formatError(err)}`);
   }
 };
 
 const pollStatus = async () => {
   try {
-    const resp = await fetch(`${backendURL}/status`);
-    if (!resp.ok) {
+    const app = getApp();
+    if (!app) {
       return;
     }
-    const status = (await resp.json()) as StatusResponse;
+    const status = await app.Status();
     setConnectionStatus(status.connected, status.peer_id);
     setRendezvousStatus(status.rendezvous_healthy, status.rendezvous_checked);
     setClientId(status.client_id);
@@ -232,19 +279,17 @@ const pollStatus = async () => {
 
 const pollMessages = async () => {
   try {
-    const resp = await fetch(`${backendURL}/messages`);
-    if (resp.status === 204) {
+    const app = getApp();
+    if (!app) {
       return;
     }
-    if (!resp.ok) {
+    const messages = await app.Messages();
+    if (messages.length === 0) {
       return;
     }
-    const payload = (await resp.json()) as MessageResponse;
-    if (payload.messages && payload.messages.length > 0) {
-      const displayId = formatIdGroups(currentPeerId) || "Peer";
-      for (const message of payload.messages) {
-        appendMessage(`${displayId}: ${message}`, "remote");
-      }
+    const displayId = formatIdGroups(currentPeerId) || "Peer";
+    for (const message of messages) {
+      appendMessage(`${displayId}: ${message}`, "remote");
     }
   } catch {
     return;
@@ -256,16 +301,13 @@ const pollPending = async () => {
     return;
   }
   try {
-    const resp = await fetch(`${backendURL}/pending`);
-    if (resp.status === 204) {
+    const app = getApp();
+    if (!app) {
       return;
     }
-    if (!resp.ok) {
-      return;
-    }
-    const payload = (await resp.json()) as PendingResponse;
-    if (payload.id) {
-      showPendingModal(payload.id);
+    const pending = await app.Pending();
+    if (pending) {
+      showPendingModal(pending);
     }
   } catch {
     return;

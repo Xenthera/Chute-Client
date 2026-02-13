@@ -6,7 +6,7 @@ OS=("linux" "darwin" "windows")
 ARCH=("amd64" "arm64")
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BACKEND_DIR="$ROOT_DIR/backend"
+BACKEND_DIR="$ROOT_DIR/app"
 OUT_DIR="$ROOT_DIR/bin"
 
 # create output folder

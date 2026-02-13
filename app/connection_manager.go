@@ -17,7 +17,7 @@ const (
 	iceTTLSeconds         = 60
 	intentTTLSeconds      = 20
 	iceGatherTimeout      = 10 * time.Second
-	iceConnectTimeout     = 20 * time.Second
+	iceConnectTimeout     = 2 * time.Minute
 	iceLookupPollInterval = 1 * time.Second
 	rateLimitBackoff      = 3 * time.Second
 )
@@ -68,7 +68,7 @@ func (m *ConnectionManager) Connect(targetID string) (*ChuteSession, error) {
 		log.Printf("connect intent failed target=%s err=%v", targetID, err)
 	}
 
-	remoteInfo, err := waitForICEInfo(m.serverAddr, targetID, iceConnectTimeout)
+	remoteInfo, err := waitForICEInfo(m.serverAddr, targetID, m.localID, iceConnectTimeout)
 	if err != nil {
 		_ = agent.Close()
 		return nil, err
@@ -267,14 +267,17 @@ func (m *ConnectionManager) RendezvousHealth() (bool, bool) {
 }
 
 // Signaling helpers
-func waitForICEInfo(serverAddr, targetID string, timeout time.Duration) (IceInfo, error) {
+func waitForICEInfo(serverAddr, targetID, fromID string, timeout time.Duration) (IceInfo, error) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		info, ok, err := lookupICE(serverAddr, targetID)
+		info, ok, err := lookupICE(serverAddr, targetID, fromID)
 		if err != nil {
 			if _, limited := err.(rateLimitError); limited {
 				time.Sleep(rateLimitBackoff)
 				continue
+			}
+			if _, declined := err.(declineError); declined {
+				return IceInfo{}, err
 			}
 			return IceInfo{}, err
 		}
