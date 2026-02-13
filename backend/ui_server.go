@@ -36,7 +36,7 @@ type uiSendRequest struct {
 }
 
 type uiMessageResponse struct {
-	Message string `json:"message"`
+	Messages []string `json:"messages"`
 }
 
 func startUIServer(ctx context.Context, addr string, client *Client, manager *ConnectionManager, serverAddr, clientID string) error {
@@ -162,13 +162,28 @@ func (s *uiServer) handleMessages(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	select {
-	case msg := <-s.client.ReceiveChan():
-		writeJSON(w, http.StatusOK, uiMessageResponse{Message: string(msg)})
+	messages := drainMessages(s.client.ReceiveChan(), 50)
+	if len(messages) == 0 {
+		w.WriteHeader(http.StatusNoContent)
 		return
-	default:
 	}
-	w.WriteHeader(http.StatusNoContent)
+	writeJSON(w, http.StatusOK, uiMessageResponse{Messages: messages})
+}
+
+func drainMessages(ch <-chan []byte, max int) []string {
+	if max <= 0 {
+		max = 1
+	}
+	out := make([]string, 0, max)
+	for i := 0; i < max; i++ {
+		select {
+		case msg := <-ch:
+			out = append(out, string(msg))
+		default:
+			return out
+		}
+	}
+	return out
 }
 
 func (s *uiServer) handleDisconnect(w http.ResponseWriter, r *http.Request) {

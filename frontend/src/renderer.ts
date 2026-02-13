@@ -8,7 +8,7 @@ type StatusResponse = {
 };
 
 type MessageResponse = {
-  message: string;
+  messages: string[];
 };
 
 const backendURL = "http://127.0.0.1:8787";
@@ -182,9 +182,11 @@ const pollMessages = async () => {
       return;
     }
     const payload = (await resp.json()) as MessageResponse;
-    if (payload.message) {
+    if (payload.messages && payload.messages.length > 0) {
       const displayId = formatIdGroups(currentPeerId) || "Peer";
-      appendMessage(`${displayId}: ${payload.message}`, "remote");
+      for (const message of payload.messages) {
+        appendMessage(`${displayId}: ${message}`, "remote");
+      }
     }
   } catch {
     return;
