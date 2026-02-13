@@ -1,12 +1,27 @@
-const BACKEND_URL = "http://127.0.0.1:8787";
-const statusDot = document.getElementById("status-dot");
-const statusText = document.getElementById("status-text");
-const rendezvousStatus = document.getElementById("rendezvous-status");
-const peerInput = document.getElementById("peer-id");
-const connectButton = document.getElementById("connect");
-const messageInput = document.getElementById("message-input");
-const messagesBox = document.getElementById("messages");
-const appendMessage = (text, kind = "system") => {
+type StatusResponse = {
+  client_id: string;
+  server_addr: string;
+  connected: boolean;
+  peer_id: string;
+  rendezvous_registered: boolean;
+};
+
+type MessageResponse = {
+  message: string;
+};
+
+const backendURL = "http://127.0.0.1:8787";
+
+const statusDot = document.getElementById("status-dot") as HTMLSpanElement | null;
+const statusText = document.getElementById("status-text") as HTMLSpanElement | null;
+const clientIdLabel = document.getElementById("client-id") as HTMLSpanElement | null;
+const rendezvousStatus = document.getElementById("rendezvous-status") as HTMLDivElement | null;
+const peerInput = document.getElementById("peer-id") as HTMLInputElement | null;
+const connectButton = document.getElementById("connect") as HTMLButtonElement | null;
+const messageInput = document.getElementById("message-input") as HTMLInputElement | null;
+const messagesBox = document.getElementById("messages") as HTMLDivElement | null;
+
+const appendMessage = (text: string, kind: "local" | "remote" | "system" = "system") => {
   if (!messagesBox) {
     return;
   }
@@ -16,7 +31,8 @@ const appendMessage = (text, kind = "system") => {
   messagesBox.appendChild(line);
   messagesBox.scrollTop = messagesBox.scrollHeight;
 };
-const setConnectionStatus = (connected, peerId) => {
+
+const setConnectionStatus = (connected: boolean, peerId: string) => {
   if (statusDot) {
     statusDot.classList.toggle("connected", connected);
   }
@@ -24,14 +40,23 @@ const setConnectionStatus = (connected, peerId) => {
     statusText.textContent = connected && peerId ? `Connected to ${peerId}` : "Disconnected";
   }
 };
-const setRendezvousStatus = (registered) => {
+
+const setRendezvousStatus = (registered: boolean) => {
   if (!rendezvousStatus) {
     return;
   }
   rendezvousStatus.textContent = registered ? "Rendezvous: Registered" : "Rendezvous: Unregistered";
 };
-const postJSON = async (path, payload) => {
-  const resp = await fetch(`${BACKEND_URL}${path}`, {
+
+const setClientId = (clientId: string) => {
+  if (!clientIdLabel) {
+    return;
+  }
+  clientIdLabel.textContent = clientId ? `Your ID: ${clientId}` : "Your ID: --";
+};
+
+const postJSON = async <T>(path: string, payload: unknown): Promise<T> => {
+  const resp = await fetch(`${backendURL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
@@ -40,8 +65,9 @@ const postJSON = async (path, payload) => {
     const text = await resp.text();
     throw new Error(text || resp.statusText);
   }
-  return resp.json();
+  return resp.json() as Promise<T>;
 };
+
 const connectToPeer = async () => {
   if (!peerInput) {
     return;
@@ -52,14 +78,19 @@ const connectToPeer = async () => {
     appendMessage("Enter a peer ID before connecting.");
     return;
   }
+  if (statusText?.textContent?.includes("Connected to") && statusText.textContent.includes(targetId)) {
+    appendMessage("Already connected to that peer.");
+    return;
+  }
   appendMessage(`Connecting to ${targetId}...`);
   try {
     await postJSON("/connect", { target_id: targetId });
     appendMessage(`Connected to ${targetId}.`, "system");
   } catch (err) {
-    appendMessage(`Connect failed: ${err.message}`);
+    appendMessage(`Connect failed: ${(err as Error).message}`);
   }
 };
+
 const sendMessage = async () => {
   if (!messageInput) {
     return;
@@ -73,33 +104,37 @@ const sendMessage = async () => {
   try {
     await postJSON("/send", { message: text });
   } catch (err) {
-    appendMessage(`Send failed: ${err.message}`);
+    appendMessage(`Send failed: ${(err as Error).message}`);
   }
 };
+
 const pollStatus = async () => {
   try {
-    const resp = await fetch(`${BACKEND_URL}/status`);
+    const resp = await fetch(`${backendURL}/status`);
     if (!resp.ok) {
       return;
     }
-    const status = await resp.json();
+    const status = (await resp.json()) as StatusResponse;
     setConnectionStatus(status.connected, status.peer_id);
     setRendezvousStatus(status.rendezvous_registered);
+    setClientId(status.client_id);
   } catch {
     setConnectionStatus(false, "");
     setRendezvousStatus(false);
+    setClientId("");
   }
 };
+
 const pollMessages = async () => {
   try {
-    const resp = await fetch(`${BACKEND_URL}/messages`);
+    const resp = await fetch(`${backendURL}/messages`);
     if (resp.status === 204) {
       return;
     }
     if (!resp.ok) {
       return;
     }
-    const payload = await resp.json();
+    const payload = (await resp.json()) as MessageResponse;
     if (payload.message) {
       appendMessage(payload.message, "remote");
     }
@@ -107,7 +142,8 @@ const pollMessages = async () => {
     return;
   }
 };
-const init = () => {
+
+const init = async () => {
   appendMessage("Chute GUI Running");
   connectButton?.addEventListener("click", connectToPeer);
   messageInput?.addEventListener("keydown", (event) => {
@@ -119,5 +155,6 @@ const init = () => {
   setInterval(pollStatus, 1000);
   setInterval(pollMessages, 500);
 };
+
 window.addEventListener("DOMContentLoaded", init);
 

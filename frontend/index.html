@@ -54,6 +54,11 @@
         box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.15),
           inset -2px -2px 4px rgba(255, 255, 255, 0.8);
       }
+      .status-dot.connected {
+        background: #6ccf88;
+        box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.12),
+          inset -2px -2px 4px rgba(255, 255, 255, 0.9);
+      }
       .row {
         display: flex;
         gap: 8px;
@@ -130,6 +135,9 @@
       <div class="status">
         <span id="status-dot" class="status-dot" aria-label="connection status"></span>
         <span id="status-text">Disconnected</span>
+        <span id="client-id" style="margin-left:auto; color: var(--muted); text-transform:none; letter-spacing:0.2px;">
+          Your ID: --
+        </span>
       </div>
 
       <div class="row">
@@ -148,7 +156,7 @@
       </div>
     </div>
 
-    <script src="renderer.js"></script>
+    <script type="module" src="dist/renderer.js"></script>
   </body>
 </html>
 

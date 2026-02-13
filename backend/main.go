@@ -12,6 +12,7 @@ import (
 
 func main() {
 	serverAddr := flag.String("server", "chute-rendezvous-server.fly.dev", "rendezvous server address (host:port)")
+	uiAddr := flag.String("ui", "127.0.0.1:8787", "ui api address (host:port)")
 	flag.Parse()
 
 	// Startup
@@ -32,6 +33,9 @@ func main() {
 	manager.SetSessionSetter(client.SetSession)
 	go handleSignals(client, cancel)
 	go client.StartPolling(ctx, manager)
+	if err := startUIServer(ctx, *uiAddr, client, manager, *serverAddr, clientID); err != nil {
+		log.Printf("ui server failed: %v", err)
+	}
 
 	// GUI-first: keep backend running without the CLI loop.
 	<-ctx.Done()

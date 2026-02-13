@@ -96,6 +96,14 @@ func (c *Client) IsConnected() bool {
 	return session.IsConnected()
 }
 
+func (c *Client) CurrentPeerID() string {
+	session := c.getSession()
+	if session == nil {
+		return ""
+	}
+	return session.CurrentPeerID()
+}
+
 func (c *Client) ReceiveChan() <-chan []byte {
 	return c.receive
 }
