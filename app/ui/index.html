@@ -40,11 +40,8 @@
         gap: 8px;
         font-weight: 300;
         padding: 8px 12px;
-        border-radius: 14px;
-        background: var(--surface);
         text-transform: uppercase;
         letter-spacing: 1px;
-        box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
       }
       .client-id {
         margin-left: auto;
@@ -161,16 +158,6 @@
       .modal-actions .accept {
         color: #2f7a4d;
       }
-      .scrollbox {
-        flex: 1;
-        background: var(--surface-2);
-        border: 1px solid #c3c7cf;
-        border-radius: 6px;
-        padding: 14px;
-        overflow-y: auto;
-        min-height: 120px;
-        box-shadow: none;
-      }
       .rendezvous-status {
         font-size: 11px;
         color: var(--muted);
@@ -179,6 +166,9 @@
         letter-spacing: 0.6px;
         text-transform: uppercase;
         padding: 2px 4px 0;
+      }
+      .footer-row {
+        margin-top: auto;
       }
       .send-row input {
         flex: 1;
@@ -198,19 +188,13 @@
         </span>
       </div>
 
-      <div class="row">
-        <input id="peer-id" type="text" placeholder="Peer ID" />
-        <button id="connect">Connect</button>
-      </div>
-
-      <div id="messages" class="scrollbox" aria-live="polite"></div>
-
-      <div class="row send-row">
-        <input id="message-input" type="text" placeholder="Type a message..." />
-      </div>
-
       <div id="rendezvous-status" class="rendezvous-status">
         Rendezvous: Checking
+      </div>
+
+      <div class="row footer-row">
+        <input id="peer-id" type="text" placeholder="Peer ID" />
+        <button id="connect">Connect</button>
       </div>
     </div>
 
