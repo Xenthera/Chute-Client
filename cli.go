@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func runCLI(ctx context.Context, cancel context.CancelFunc, client *Client, clientID, serverAddr string) {
+func runCLI(ctx context.Context, cancel context.CancelFunc, client *Client, manager *ConnectionManager, clientID, serverAddr string) {
 	scanner := bufio.NewScanner(os.Stdin)
 	printHelp()
 	go printReceived(ctx, client)
@@ -39,31 +39,32 @@ func runCLI(ctx context.Context, cancel context.CancelFunc, client *Client, clie
 				fmt.Println("usage: connect <id>")
 				continue
 			}
-			if err := client.Connect(id); err != nil {
+			session, err := manager.Connect(id)
+			if err != nil {
 				log.Printf("connect failed client_id=%s target=%s err=%v", clientID, id, err)
 				continue
 			}
 			message := fmt.Sprintf("hello from %s\n", clientID)
-			if err := client.SendMessage(id, []byte(message)); err != nil {
+			if err := session.Send([]byte(message)); err != nil {
 				log.Printf("connect hello failed client_id=%s target=%s err=%v", clientID, id, err)
 				continue
 			}
 			log.Printf("connect ok client_id=%s target=%s", clientID, id)
-		case strings.HasPrefix(line, "udp "):
-			message, ok := parseUDPCommand(line)
+		case strings.HasPrefix(line, "send "):
+			message, ok := parseSendCommand(line)
 			if !ok {
-				fmt.Println("usage: udp <message>")
+				fmt.Println("usage: send <message>")
 				continue
 			}
 			if !client.IsConnected() {
-				log.Printf("udp denied client_id=%s err=%v", clientID, errors.New("no active session"))
+				log.Printf("send denied client_id=%s err=%v", clientID, errors.New("no active session"))
 				continue
 			}
 			if err := client.SendMessage("", []byte(message)); err != nil {
-				log.Printf("udp failed client_id=%s err=%v", clientID, err)
+				log.Printf("send failed client_id=%s err=%v", clientID, err)
 				continue
 			}
-			log.Printf("udp ok client_id=%s", clientID)
+			log.Printf("send ok client_id=%s", clientID)
 		default:
 			printHelp()
 		}
@@ -73,7 +74,7 @@ func runCLI(ctx context.Context, cancel context.CancelFunc, client *Client, clie
 func printHelp() {
 	fmt.Println("commands:")
 	fmt.Println("  connect <id>")
-	fmt.Println("  udp <message>")
+	fmt.Println("  send <message>")
 	fmt.Println("  exit")
 }
 
@@ -85,12 +86,12 @@ func parseConnectID(line string) (string, bool) {
 	return id, true
 }
 
-func parseUDPCommand(line string) (string, bool) {
-	parts := strings.SplitN(line, " ", 3)
+func parseSendCommand(line string) (string, bool) {
+	parts := strings.SplitN(line, " ", 2)
 	if len(parts) < 2 {
 		return "", false
 	}
-	message := strings.TrimSpace(strings.TrimPrefix(line, "udp "))
+	message := strings.TrimSpace(parts[1])
 	if message == "" {
 		return "", false
 	}

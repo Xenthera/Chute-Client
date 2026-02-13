@@ -39,16 +39,19 @@ func main() {
 	defer cancel()
 
 	session := NewChuteSession(conn, clientID)
-	session.Start()
 	client := NewClient(clientID, *serverAddr, session)
-	if err := client.Register(resolvedPort); err != nil {
+	if err := client.Register(conn); err != nil {
 		log.Fatalf("registration failed: %v", err)
 	}
 	log.Println("registered with rendezvous server")
 
+	session.Start()
+	manager := NewConnectionManagerWithPort(clientID, *serverAddr, session.Listener(), session, resolvedPort)
+	manager.SetLocalEndpoints(client.localIPs, client.localPort, client.publicIP, client.publicPort)
 	go handleSignals(client, cancel)
+	go client.StartPolling(ctx, manager)
 
-	runCLI(ctx, cancel, client, clientID, *serverAddr)
+	runCLI(ctx, cancel, client, manager, clientID, *serverAddr)
 }
 
 func handleSignals(client *Client, cancel context.CancelFunc) {

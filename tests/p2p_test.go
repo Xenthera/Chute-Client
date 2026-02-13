@@ -19,7 +19,7 @@ func TestP2PHarness(t *testing.T) {
 
 	serverAddr := os.Getenv("CHUTE_SERVER")
 	if serverAddr == "" {
-		serverAddr = "localhost:8080"
+		serverAddr = "localhost:8443"
 	}
 	serverAddr = strings.Replace(serverAddr, "localhost", "127.0.0.1", 1)
 
@@ -84,7 +84,9 @@ func mustListenUDP(t *testing.T) *net.UDPConn {
 func registerClient(t *testing.T, serverAddr, id string, conn *net.UDPConn) {
 	t.Helper()
 	port := conn.LocalAddr().(*net.UDPAddr).Port
-	if err := client.RegisterWithServer(serverAddr, id, port); err != nil {
+	localIPs := []string{"127.0.0.1"}
+	publicIP := "127.0.0.1"
+	if err := client.RegisterWithServer(serverAddr, id, localIPs, port, publicIP, port, ""); err != nil {
 		t.Fatalf("register %s failed: %v", id, err)
 	}
 }

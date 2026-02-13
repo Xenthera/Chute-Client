@@ -62,6 +62,14 @@ func (s *ChuteSession) Start() {
 }
 
 func (s *ChuteSession) Connect(peer PeerEndpoint, id string) error {
+	return s.connectWithContext(context.Background(), peer, id)
+}
+
+func (s *ChuteSession) ConnectWithContext(ctx context.Context, peer PeerEndpoint, id string) error {
+	return s.connectWithContext(ctx, peer, id)
+}
+
+func (s *ChuteSession) connectWithContext(ctx context.Context, peer PeerEndpoint, id string) error {
 	s.Mutex.Lock()
 	if s.Connected {
 		s.Mutex.Unlock()
@@ -74,7 +82,7 @@ func (s *ChuteSession) Connect(peer PeerEndpoint, id string) error {
 		IP:   net.ParseIP(peer.IP),
 		Port: peer.Port,
 	}
-	conn, err := s.transport.Dial(context.Background(), remoteAddr, clientTLSConfig(), quicConfig())
+	conn, err := s.transport.Dial(ctx, remoteAddr, clientTLSConfig(), quicConfig())
 	if err != nil {
 		return err
 	}
@@ -198,6 +206,12 @@ func (s *ChuteSession) CurrentPeerID() string {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 	return s.PeerID
+}
+
+func (s *ChuteSession) Listener() *quic.Listener {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	return s.listener
 }
 
 func (s *ChuteSession) readLoop(conn quic.Connection) {

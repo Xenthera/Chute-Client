@@ -35,6 +35,27 @@ func postJSON(serverAddr, path string, payload any, response any, okStatuses ...
 	return fmt.Errorf("unexpected status: %d", resp.StatusCode)
 }
 
+func postJSONWithStatus(serverAddr, path string, payload any, response any) (int, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return 0, err
+	}
+
+	url := "http://" + serverAddr + path
+	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if response != nil && resp.StatusCode == http.StatusOK {
+		if err := json.NewDecoder(resp.Body).Decode(response); err != nil {
+			return resp.StatusCode, err
+		}
+	}
+	return resp.StatusCode, nil
+}
+
 func sendUDP(conn *net.UDPConn, peerIP string, peerPort int, payload []byte) error {
 	remoteAddr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(peerIP, fmt.Sprintf("%d", peerPort)))
 	if err != nil {
