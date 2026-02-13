@@ -171,10 +171,11 @@ const acceptPending = async () => {
     hidePendingModal();
     return;
   }
+  const peerId = pendingPeerId;
+  hidePendingModal();
   try {
     await postJSON("/accept", {});
-    appendMessage(`Accepted connection from ${formatIdGroups(pendingPeerId) || pendingPeerId}.`, "system");
-    hidePendingModal();
+    appendMessage(`Accepted connection from ${formatIdGroups(peerId) || peerId}.`, "system");
   } catch (err) {
     appendMessage(`Accept failed: ${(err as Error).message}`);
   }
@@ -185,10 +186,11 @@ const declinePending = async () => {
     hidePendingModal();
     return;
   }
+  const peerId = pendingPeerId;
+  hidePendingModal();
   try {
     await postJSON("/decline", {});
-    appendMessage(`Declined connection from ${formatIdGroups(pendingPeerId) || pendingPeerId}.`, "system");
-    hidePendingModal();
+    appendMessage(`Declined connection from ${formatIdGroups(peerId) || peerId}.`, "system");
   } catch (err) {
     appendMessage(`Decline failed: ${(err as Error).message}`);
   }

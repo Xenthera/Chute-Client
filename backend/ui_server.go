@@ -187,11 +187,12 @@ func (s *uiServer) handleAccept(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+	// Clear pending immediately to avoid duplicate accept attempts.
+	s.client.clearPendingIntent()
 	if _, err := s.manager.ConnectWithPeerInfo(intent); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	s.client.clearPendingIntent()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "accepted"})
 }
 
