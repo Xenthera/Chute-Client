@@ -30,9 +30,9 @@ type ConnectionManager struct {
 	iceMu    sync.Mutex
 	iceAgent *ice.Agent
 
-	regMu           sync.RWMutex
-	lastRegisterAt  time.Time
-	lastRegisterTTL time.Duration
+	healthMu           sync.RWMutex
+	rendezvousHealthy  bool
+	rendezvousChecked  bool
 }
 
 // Construction & wiring
@@ -62,7 +62,6 @@ func (m *ConnectionManager) Connect(targetID string) (*ChuteSession, error) {
 		_ = agent.Close()
 		return nil, err
 	}
-	m.markRegistered(iceTTLSeconds)
 
 	if err := sendConnectIntent(m.serverAddr, m.localID, targetID, intentTTLSeconds); err != nil {
 		log.Printf("connect intent failed target=%s err=%v", targetID, err)
@@ -91,7 +90,6 @@ func (m *ConnectionManager) ConnectWithPeerInfo(info IceInfo) (*ChuteSession, er
 		_ = agent.Close()
 		return nil, err
 	}
-	m.markRegistered(iceTTLSeconds)
 
 	return m.startICE(agent, info.ID, info)
 }
@@ -252,22 +250,19 @@ func (m *ConnectionManager) closeICE() {
 	}
 }
 
-func (m *ConnectionManager) markRegistered(ttlSeconds int) {
-	m.regMu.Lock()
-	m.lastRegisterAt = time.Now()
-	m.lastRegisterTTL = time.Duration(ttlSeconds) * time.Second
-	m.regMu.Unlock()
+func (m *ConnectionManager) SetRendezvousHealth(ok bool) {
+	m.healthMu.Lock()
+	m.rendezvousHealthy = ok
+	m.rendezvousChecked = true
+	m.healthMu.Unlock()
 }
 
-func (m *ConnectionManager) IsRegistered() bool {
-	m.regMu.RLock()
-	at := m.lastRegisterAt
-	ttl := m.lastRegisterTTL
-	m.regMu.RUnlock()
-	if at.IsZero() || ttl <= 0 {
-		return false
-	}
-	return time.Now().Before(at.Add(ttl))
+func (m *ConnectionManager) RendezvousHealth() (bool, bool) {
+	m.healthMu.RLock()
+	ok := m.rendezvousHealthy
+	checked := m.rendezvousChecked
+	m.healthMu.RUnlock()
+	return ok, checked
 }
 
 // Signaling helpers

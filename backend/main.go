@@ -5,9 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func main() {
@@ -33,6 +35,7 @@ func main() {
 	manager.SetSessionSetter(client.SetSession)
 	go handleSignals(client, cancel)
 	go client.StartPolling(ctx, manager)
+	go checkRendezvousHealth(*serverAddr, manager)
 	if err := startUIServer(ctx, *uiAddr, client, manager, *serverAddr, clientID); err != nil {
 		log.Printf("ui server failed: %v", err)
 	}
@@ -52,4 +55,16 @@ func handleSignals(client *Client, cancel context.CancelFunc) {
 		log.Printf("unregister failed: %v", err)
 	}
 	os.Exit(0)
+}
+
+func checkRendezvousHealth(serverAddr string, manager *ConnectionManager) {
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://" + serverAddr + "/health")
+	if err != nil {
+		manager.SetRendezvousHealth(false)
+		log.Printf("rendezvous health failed: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+	manager.SetRendezvousHealth(resp.StatusCode == http.StatusOK)
 }

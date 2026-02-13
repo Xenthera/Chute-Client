@@ -3,7 +3,8 @@ type StatusResponse = {
   server_addr: string;
   connected: boolean;
   peer_id: string;
-  rendezvous_registered: boolean;
+  rendezvous_healthy: boolean;
+  rendezvous_checked: boolean;
 };
 
 type MessageResponse = {
@@ -41,11 +42,15 @@ const setConnectionStatus = (connected: boolean, peerId: string) => {
   }
 };
 
-const setRendezvousStatus = (registered: boolean) => {
+const setRendezvousStatus = (healthy: boolean, checked: boolean) => {
   if (!rendezvousStatus) {
     return;
   }
-  rendezvousStatus.textContent = registered ? "Rendezvous: Registered" : "Rendezvous: Unregistered";
+  if (!checked) {
+    rendezvousStatus.textContent = "Rendezvous: Checking";
+    return;
+  }
+  rendezvousStatus.textContent = healthy ? "Rendezvous: Online" : "Rendezvous: Offline";
 };
 
 const setClientId = (clientId: string) => {
@@ -116,11 +121,11 @@ const pollStatus = async () => {
     }
     const status = (await resp.json()) as StatusResponse;
     setConnectionStatus(status.connected, status.peer_id);
-    setRendezvousStatus(status.rendezvous_registered);
+    setRendezvousStatus(status.rendezvous_healthy, status.rendezvous_checked);
     setClientId(status.client_id);
   } catch {
     setConnectionStatus(false, "");
-    setRendezvousStatus(false);
+    setRendezvousStatus(false, false);
     setClientId("");
   }
 };

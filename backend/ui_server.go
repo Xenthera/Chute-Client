@@ -23,7 +23,8 @@ type uiStatusResponse struct {
 	ServerAddr            string `json:"server_addr"`
 	Connected             bool   `json:"connected"`
 	PeerID                string `json:"peer_id"`
-	RendezvousRegistered  bool   `json:"rendezvous_registered"`
+	RendezvousHealthy     bool   `json:"rendezvous_healthy"`
+	RendezvousChecked     bool   `json:"rendezvous_checked"`
 }
 
 type uiConnectRequest struct {
@@ -102,8 +103,10 @@ func (s *uiServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 		ServerAddr:           s.serverAddr,
 		Connected:            s.client.IsConnected(),
 		PeerID:               s.client.CurrentPeerID(),
-		RendezvousRegistered: s.manager.IsRegistered(),
 	}
+	ok, checked := s.manager.RendezvousHealth()
+	resp.RendezvousHealthy = ok
+	resp.RendezvousChecked = checked
 	writeJSON(w, http.StatusOK, resp)
 }
 
